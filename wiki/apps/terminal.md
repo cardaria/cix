@@ -29,6 +29,9 @@ The live config is `dotfiles/ghostty/config.ghostty`, linked to
 ```ini
 theme = GitHub Light High Contrast
 font-family = Berkeley Mono
+
+confirm-close-surface = false
+app-notifications = no-clipboard-copy,no-config-reload
 ```
 
 | Action | Shortcut |
