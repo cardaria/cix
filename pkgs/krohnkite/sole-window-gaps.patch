@@ -1,0 +1,11 @@
+diff --git a/src/engine/engine.ts b/src/engine/engine.ts
+--- a/src/engine/engine.ts
++++ b/src/engine/engine.ts
+@@ -275,6 +275,7 @@ class TilingEngine {
+           workingArea.width * (CONFIG.soleWindowWidth / 100)) /
+         2;
+       tilingArea = workingArea.gap(v_gap, v_gap, h_gap, h_gap);
++      tilingArea = tilingArea.gap(gaps.left, gaps.right, gaps.top, gaps.bottom);
+     } else
+       tilingArea = workingArea.gap(
+         gaps.left,

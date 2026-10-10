@@ -1,0 +1,5 @@
+# Vendored patches keep upstream whitespace
+*.patch -whitespace
+
+# Spicetify rewrites its config with trailing spaces after empty values
+dotfiles/spicetify/config-xpui.ini -whitespace

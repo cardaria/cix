@@ -1,0 +1,181 @@
+# Wiki pages → repo sources and local memory-card slugs
+# Coverage, paths and frontmatter are checked by nix flake check
+
+overview.md:
+  sources: [flake.nix, home/cardaria/default.nix]
+  memory: []
+
+deployment.md:
+  sources: [flake.nix]
+  memory: [flake-deliberate-updates]
+
+constraints.md:
+  sources: [AGENTS.md]
+  memory: [live-dotfiles-out-of-store, disks-by-identity]
+
+troubleshooting.md:
+  sources: []
+  memory: []
+
+architecture/index.md:
+  sources: [flake.nix, home/cardaria/default.nix]
+  memory: [live-dotfiles-out-of-store]
+
+architecture/flake.md:
+  sources: [flake.nix, flake.lock]
+  memory: [flake-deliberate-updates]
+
+architecture/draba.md:
+  sources:
+    - hosts/draba/default.nix
+    - hosts/draba/configuration.nix
+    - hosts/draba/hardware.nix
+    - hosts/draba/graphics.nix
+    - hosts/draba/input.nix
+    - hosts/draba/compute.nix
+    - hosts/draba/desktop-gpu
+    - hosts/draba/storage.nix
+    - pkgs/nvidia-vaapi-driver/default.nix
+    - pkgs/nvidia-vaapi-driver/README.md
+  memory: [rtx5060-display-rtx5090-compute, rtx5060-pcie-gen3-x2-slot, disks-by-identity, console-mode-early-kms]
+
+architecture/gpu-access.md:
+  sources:
+    - hosts/draba/compute.nix
+    - modules/home/compute.nix
+    - modules/home/llm/default.nix
+    - modules/home/ocr/default.nix
+  memory: [rtx5060-display-rtx5090-compute]
+
+desktop/plasma.md:
+  sources:
+    - modules/nixos/desktop.nix
+    - modules/home/wayland/plasma.nix
+    - pkgs/krohnkite/default.nix
+    - pkgs/krohnkite/README.md
+    - pkgs/krohnkite/sole-window-gaps.patch
+    - modules/home/wayland/appearance.nix
+    - hosts/draba/graphics.nix
+    - dotfiles/kwin/
+    - dotfiles/plasma-systemmonitor/
+    - modules/home/apps/plasma-systemmonitor.nix
+    - dotfiles/zsh/.zshenv
+    - flake.nix
+  memory: [rtx5060-display-rtx5090-compute, plasma-kwin-gpu-env, kwin-output-config-dotfile, portal-needs-desktop-env, systemmonitor-overview-style]
+
+desktop/login.md:
+  sources:
+    - modules/nixos/login.nix
+    - modules/nixos/desktop.nix
+    - hosts/draba/graphics.nix
+  memory: [rtx5060-display-rtx5090-compute, plasma-kwin-gpu-env, kwallet-secret-store]
+
+desktop/preferences.md:
+  sources:
+    - modules/home/wayland/plasma.nix
+    - hosts/draba/input.nix
+  memory: []
+
+desktop/shell.md:
+  sources:
+    - modules/home/shell.nix
+    - modules/home/development.nix
+    - dotfiles/zsh/
+  memory: []
+
+apps/terminal.md:
+  sources:
+    - modules/home/apps/fastfetch.nix
+    - modules/home/apps/ghostty.nix
+    - modules/home/wayland/appearance.nix
+    - modules/home/wayland/plasma.nix
+    - dotfiles/fontconfig/
+    - dotfiles/fastfetch/
+    - dotfiles/ghostty/
+  memory: []
+
+apps/browsers.md:
+  sources:
+    - modules/home/apps/brave-origin.nix
+    - dotfiles/brave-origin/
+  memory: [brave-vaapi-nvidia]
+
+apps/media.md:
+  sources:
+    - modules/nixos/desktop.nix
+    - modules/home/apps/default.nix
+    - modules/home/apps/obsidian.nix
+    - modules/home/apps/plex.nix
+    - dotfiles/plex/
+    - modules/home/apps/spotify.nix
+    - modules/home/apps/vesktop.nix
+    - modules/home/apps/teamspeak.nix
+    - dotfiles/mimeapps/mimeapps.list
+    - dotfiles/spicetify/
+  memory: [vesktop-autostart-wrapped, plex-vaapi-desktop-gpu, pdf-in-brave-no-qt-viewer, speechd-for-electron, spicetify-marketplace-choice]
+
+dev/tools.md:
+  sources:
+    - modules/home/development.nix
+    - modules/home/ssh.nix
+    - dotfiles/micro/
+    - dotfiles/zed/
+    - dotfiles/vscode/
+  memory: []
+
+dev/nix-packaging.md:
+  sources:
+    - pkgs/default.nix
+    - pkgs/krohnkite/default.nix
+    - pkgs/krohnkite/README.md
+    - pkgs/krohnkite/sole-window-gaps.patch
+    - pkgs/ninfer/default.nix
+    - pkgs/ninfer/README.md
+    - pkgs/chandra-ocr/default.nix
+    - pkgs/chandra-ocr/README.md
+    - pkgs/nvidia-vaapi-driver/default.nix
+    - pkgs/nvidia-vaapi-driver/README.md
+    - modules/nixos/packages.nix
+    - flake.nix
+  memory: []
+
+dev/local-llm.md:
+  sources:
+    - modules/home/llm/default.nix
+    - modules/home/llm/cix-llm
+    - pkgs/ninfer/default.nix
+    - pkgs/ninfer/README.md
+    - home/cardaria/default.nix
+  memory: [local-llm-stack, ai-folder-layout]
+
+dev/local-ocr.md:
+  sources:
+    - modules/home/ocr/default.nix
+    - modules/home/ocr/model.py
+    - pkgs/chandra-ocr/default.nix
+    - pkgs/chandra-ocr/README.md
+    - home/cardaria/default.nix
+    - flake.nix
+    - flake.lock
+  memory: [local-ocr-stack]
+
+security/secrets.md:
+  sources:
+    - secrets/agenix-rules.nix
+    - hosts/draba/network-share.nix
+  memory: [agenix-key-in-1password]
+
+security/1password.md:
+  sources: [modules/nixos/1password.nix, modules/nixos/desktop.nix]
+  memory: []
+
+system/network-share.md:
+  sources: [hosts/draba/network-share.nix]
+  memory: []
+
+system/boot.md:
+  sources:
+    - hosts/draba/compute.nix
+    - hosts/draba/configuration.nix
+    - hosts/draba/storage.nix
+  memory: [disks-by-identity, esp-generation-limit]

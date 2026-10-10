@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<EOF
+Usage: cix-llm [status|unload|logs|fetch|ui]
+
+  status   loaded profile, NInfer queue and KV use, 5090 VRAM (default)
+  unload   stop the loaded profile now
+  logs     follow llama-swap and NInfer logs
+  fetch    download and verify the pinned model into $MODEL_DIR
+  ui       print the llama-swap web UI address
+EOF
+}
+
+status() {
+  local running
+  if ! running=$(curl -fsS "$ENDPOINT/running"); then
+    echo "llama-swap is not answering; check: systemctl --user status llama-swap" >&2
+    exit 1
+  fi
+  if [[ $(jq '.running | length' <<< "$running") -eq 0 ]]; then
+    echo "No profile loaded"
+  else
+    jq -r '.running[] | "\(.model)  \(.state)"' <<< "$running"
+    # Straight to NInfer: a request through llama-swap would reset the idle timer
+    local proxy
+    proxy=$(jq -r '.running[] | select(.state == "ready") | .proxy' <<< "$running")
+    if [[ -n $proxy ]]; then
+      curl -fsS "$proxy/metrics" |
+        grep -E '^ninfer_(requests_(running|waiting)|device_kv_(used|capacity)_pages|max_context_tokens) ' || true
+    fi
+  fi
+  /run/wrappers/bin/nvidia-smi \
+    --query-gpu=name,memory.used,memory.total --format=csv,noheader
+  [[ -f $MODEL_DIR/$MODEL_FILE ]] || echo "Model missing: run cix-llm fetch" >&2
+}
+
+fetch() {
+  local target=$MODEL_DIR/$MODEL_FILE
+  if [[ -f $target ]]; then
+    echo "Verifying $target"
+    printf '%s  %s\n' "$MODEL_SHA256" "$target" | sha256sum --check
+    return
+  fi
+  mkdir -p "$MODEL_DIR"
+  # Resumable; the file only gets its final name after the hash matches
+  curl -fL --retry 5 -C - -o "$target.part" \
+    "https://huggingface.co/$MODEL_REPO/resolve/$MODEL_REV/$MODEL_FILE"
+  # A bad file would otherwise be resumed on every retry
+  if ! printf '%s  %s\n' "$MODEL_SHA256" "$target.part" | sha256sum --check; then
+    rm -f "$target.part"
+    echo "Hash mismatch: download removed, run cix-llm fetch again" >&2
+    exit 1
+  fi
+  mv "$target.part" "$target"
+}
+
+case ${1:-status} in
+  status) status ;;
+  unload) curl -fsS -X POST "$ENDPOINT/api/models/unload" && echo ;;
+  logs) exec journalctl --user -u llama-swap -f ;;
+  fetch) fetch ;;
+  ui) echo "$ENDPOINT/ui" ;;
+  -h | --help | help) usage ;;
+  *)
+    usage >&2
+    exit 1
+    ;;
+esac

@@ -1,0 +1,118 @@
+{
+  description = "cix: NixOS configurations for every machine I run";
+
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    disko.url = "github:nix-community/disko";
+    disko.inputs.nixpkgs.follows = "nixpkgs";
+    home-manager.url = "github:nix-community/home-manager";
+    home-manager.inputs.nixpkgs.follows = "nixpkgs";
+    agenix.url = "github:ryantm/agenix";
+    agenix.inputs.nixpkgs.follows = "nixpkgs";
+    plasma-manager.url = "github:nix-community/plasma-manager";
+    plasma-manager.inputs.nixpkgs.follows = "nixpkgs";
+    plasma-manager.inputs.home-manager.follows = "home-manager";
+    chandra-src = {
+      url = "github:datalab-to/chandra";
+      flake = false;
+    };
+    chandra-model = {
+      url = "git+https://huggingface.co/datalab-to/chandra-ocr-2";
+      flake = false;
+    };
+  };
+
+  outputs =
+    inputs@{
+      self,
+      nixpkgs,
+      disko,
+      home-manager,
+      agenix,
+      ...
+    }:
+    let
+      system = "x86_64-linux";
+      pkgs = nixpkgs.legacyPackages.${system};
+      formatter = pkgs.nixfmt-tree;
+    in
+    {
+      nixosConfigurations.draba = nixpkgs.lib.nixosSystem {
+        inherit system;
+        specialArgs.chandraSrc = inputs.chandra-src;
+        modules = [
+          disko.nixosModules.disko
+          home-manager.nixosModules.home-manager
+          agenix.nixosModules.default
+          ./hosts/draba
+          ./modules/nixos/desktop.nix
+          ./modules/nixos/login.nix
+          ./modules/nixos/1password.nix
+          ./modules/nixos/packages.nix
+          {
+            home-manager.useGlobalPkgs = true;
+            home-manager.useUserPackages = true;
+            home-manager.sharedModules = [ inputs.plasma-manager.homeModules.plasma-manager ];
+            home-manager.extraSpecialArgs.chandraModel = inputs.chandra-model;
+            home-manager.users.cardaria = import ./home/cardaria;
+          }
+        ];
+      };
+
+      # The host's pkgs, which allows unfree CUDA for local AI
+      packages.${system} =
+        import ./pkgs {
+          pkgs = self.nixosConfigurations.draba.pkgs;
+          chandraSrc = inputs.chandra-src;
+        }
+        // {
+          disko = disko.packages.${system}.disko;
+          agenix = agenix.packages.${system}.default;
+          age = pkgs.age;
+        };
+
+      formatter.${system} = formatter;
+
+      devShells.${system}.default = pkgs.mkShell {
+        packages = [
+          pkgs.nixd
+          pkgs.nixfmt
+          formatter
+          # Packaging helpers
+          pkgs.nurl
+          pkgs.nix-update
+          pkgs.yq-go
+        ];
+      };
+
+      checks.${system} = {
+        docs-sources =
+          pkgs.runCommand "cix-docs-sources"
+            {
+              nativeBuildInputs = [
+                pkgs.bash
+                pkgs.findutils
+                pkgs.gawk
+                pkgs.gnugrep
+                pkgs.yq-go
+              ];
+            }
+            ''
+              bash ${./wiki/_check.sh} ${self}
+              touch "$out"
+            '';
+        formatting =
+          pkgs.runCommand "cix-formatting"
+            {
+              nativeBuildInputs = [
+                pkgs.nixfmt
+                pkgs.findutils
+              ];
+            }
+            ''
+              find ${self} -type f -name '*.nix' -exec nixfmt --check {} +
+              touch "$out"
+            '';
+      };
+    };
+}

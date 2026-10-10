@@ -1,0 +1,15 @@
+# Nix build links
+/result
+/result-*
+
+# Local agent memory and notes
+/memory/
+/issues/
+
+# Editor and tool state
+/.vscode/
+/.codex/
+/.claude/settings.local.json
+
+# Runtime files in live dotfiles; busier apps have their own .gitignore
+/dotfiles/zsh/.zcompdump*
