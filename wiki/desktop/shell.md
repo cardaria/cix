@@ -44,6 +44,7 @@ place of `ls` and zoxide in place of `cd`. The config is plain native zsh in
 | `ll` | `eza -l` |
 | `la` | `eza -la` |
 | `lt` | `eza --tree` |
+| `ff` | `fastfetch` |
 
 The original `ls` stays available as `\ls` or `command ls`.
 
