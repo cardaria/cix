@@ -1,7 +1,7 @@
 ---
 title: Nix packaging
 category: dev
-tags: [packaging, override, overrideAttrs, symlinkJoin, patches, ninfer, chandra, cuda]
+tags: [packaging, override, overrideAttrs, symlinkJoin, patches, ninfer, chandra, cuda, fluxer, appimage]
 updated: 2026-10-10
 ---
 
@@ -18,7 +18,7 @@ a full vendored package. Coding agents follow the `nix-packaging` skill.
 | Change build flags / plugins | `pkg.override { … }` | Brave (`commandLineArgs`) |
 | Patch an upstream package | `pkgs/<name>/` + `overrideAttrs` + `patches` | Krohnkite sole-window gaps, NVIDIA VA-API multi-GPU |
 | Different icon / `.desktop` | `symlinkJoin` + `postBuild` | Plex |
-| Not in nixpkgs yet | `pkgs/<name>/` + `callPackage` | NInfer, Chandra OCR |
+| Not in nixpkgs yet | `pkgs/<name>/` + `callPackage` | NInfer, Chandra OCR, Fluxer Canary |
 
 No overlays: none of these changes need to be seen by other packages.
 
@@ -79,6 +79,18 @@ outside the Nix store. Provenance and local adjustments:
 
 ```sh
 nix build .#chandra-ocr -L --no-link
+```
+
+## Fluxer Canary
+
+Upstream's canary AppImage in `appimageTools.wrapType2`, after the open
+nixpkgs PR #552820; a source build would need the whole pnpm and Cargo
+monorepo. The version and hash come from upstream's `latest.json`; the
+commands, the desktop-entry and icon fixes and the removal condition are in
+`pkgs/fluxer-canary/README.md`. Usage: [Media](../apps/media.md).
+
+```sh
+nix build .#fluxer-canary -L --no-link
 ```
 
 ## Krohnkite

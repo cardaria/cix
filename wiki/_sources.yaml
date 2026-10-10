@@ -104,6 +104,9 @@ apps/media.md:
   sources:
     - modules/nixos/desktop.nix
     - modules/home/apps/default.nix
+    - modules/home/apps/fluxer.nix
+    - pkgs/fluxer-canary/default.nix
+    - pkgs/fluxer-canary/README.md
     - modules/home/apps/obsidian.nix
     - modules/home/apps/plex.nix
     - dotfiles/plex/
@@ -126,6 +129,8 @@ dev/tools.md:
 dev/nix-packaging.md:
   sources:
     - pkgs/default.nix
+    - pkgs/fluxer-canary/default.nix
+    - pkgs/fluxer-canary/README.md
     - pkgs/krohnkite/default.nix
     - pkgs/krohnkite/README.md
     - pkgs/krohnkite/sole-window-gaps.patch

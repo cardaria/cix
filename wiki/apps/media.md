@@ -1,7 +1,7 @@
 ---
 title: Media and documents
 category: apps
-tags: [haruna, merkuro, okular, gwenview, elisa, plex, spotify, spicetify, mimeapps, signal, teamspeak, vesktop, obsidian]
+tags: [haruna, merkuro, okular, gwenview, elisa, plex, spotify, spicetify, mimeapps, signal, teamspeak, vesktop, fluxer, obsidian]
 updated: 2026-10-10
 ---
 
@@ -22,6 +22,7 @@ Viewers, players, calendar and chat apps, plus the table of default applications
 | Plain text, Markdown, JSON, YAML, TOML, source files | Zed |
 | `spotify:` links | Spotify |
 | `discord:` links | Vesktop |
+| `fluxer:` links | Fluxer Canary |
 | `claude-cli:` links | Claude Code |
 
 Edit the file in the repo; it applies at once while the link is intact.
@@ -44,6 +45,7 @@ repo first.
 | Signal | `apps/default.nix` | plain package; Electron follows KWin's scale on Wayland |
 | **TeamSpeak 6** | `apps/teamspeak.nix` | `hotkey_helper` (global hotkeys) loads libX11/libXi at runtime; the override adds them to its runpath, without which it crashes at start. It reads keys through Xwayland, so global hotkeys may only fire while an X11 window has focus |
 | **Vesktop** | `apps/vesktop.nix` | package plus autostart: `~/.config/autostart/vesktop.desktop` runs the wrapped `vesktop --start-minimized` at login |
+| **Fluxer Canary** | `apps/fluxer.nix` | local package `pkgs/fluxer-canary/` (upstream AppImage, not in nixpkgs) plus autostart: `~/.config/autostart/app.fluxer.FluxerDesktopCanary.desktop` runs the wrapped `fluxer-canary --autostart` at login |
 | nvtop, gpu-screen-recorder, wl-clipboard | `apps/default.nix` | package-only |
 
 ## Notes per app
@@ -89,6 +91,16 @@ system" writes the raw `electron-unwrapped` path into that file, skipping the
 Nix wrappers, and that Electron crashes (SIGILL) at login. Leave the toggle
 alone; the entry already exists, so Vesktop shows it as on.
 
+**Fluxer Canary:** the canary channel on purpose, for the newest builds
+first. The desktop shell updates with the package (bumping is in
+`pkgs/fluxer-canary/README.md`); the app's UI modules update themselves into
+`~/.config/fluxercanary/modules`. Home Manager owns its autostart entry, as
+with Vesktop: Fluxer's own entry runs the unwrapped binary, which fails
+outside the AppImage's FHS environment. Leave the in-app autostart
+toggle alone. On start the app registers itself for `fluxer:` links with
+`xdg-mime` unless it already is the handler, which would replace the
+`mimeapps.list` link; the repo's list names it so that never runs.
+
 **Plex:** to change the icon, replace `dotfiles/plex/assets/plex.png` (keep
 the credit in its README) and rebuild. Assets are copied into the store.
 
@@ -130,6 +142,7 @@ the desktop process access to the 5090, independently of these preferences.
 | Plex is laggy and the video is black or striped | `grep 'OpenGL VENDOR' ~/.local/share/plex/Logs/Plex.log`: `llvmpipe` means software rendering, so the launcher's Zink settings aren't applied (start it with `plex-desktop` from the launcher, not the raw binary) |
 | Plex allocates memory or decodes on the 5090 | check that `~/.local/share/plex/mpv.conf` resolves to the repo's host config and sets `hwdec=vaapi-copy` plus `vaapi-device`, and that `/dev/dri/cix-desktop-render` exists; restart Plex, then check its row in `nvidia-smi` while playing |
 | Spotify has the stock look, or its panels stack vertically | quit Spotify, delete `~/.local/share/spotify-spicetify/.store`, start it again (rebuilds the copy and the backup) |
+| Fluxer doesn't start at login | is `~/.config/autostart/app.fluxer.FluxerDesktopCanary.desktop` a link into the store? A regular file means Fluxer rewrote it with the unwrapped path: delete it and switch again |
 | Vesktop doesn't start at login | `systemctl --user status app-vesktop@autostart`; is `~/.config/autostart/vesktop.desktop` a link into the store? A regular file means Vesktop rewrote it: delete it and switch again |
 
 ## Related

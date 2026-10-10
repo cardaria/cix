@@ -51,7 +51,7 @@ configured.
 | --- | --- |
 | [Terminal](apps/terminal.md) | Ghostty defaults, Konsole, Berkeley Mono, fastfetch |
 | [Browsers](apps/browsers.md) | Brave Origin (override, VA-API, frame workaround), Firefox |
-| [Media & documents](apps/media.md) | KDE viewers, Merkuro Calendar, Haruna, Plex, Spotify, Vesktop, default apps |
+| [Media & documents](apps/media.md) | KDE viewers, Merkuro Calendar, Haruna, Plex, Spotify, Vesktop, Fluxer, default apps |
 
 ## dev/
 
@@ -60,7 +60,7 @@ configured.
 | [Developer tools](dev/tools.md) | Zed, Micro, Lazygit, nixd/nixfmt, AI CLIs, nvtop |
 | [Local LLM](dev/local-llm.md) | Qwen3.8-27B on the 5090: NInfer, llama-swap, OpenCode profiles, `~/AI` |
 | [Local OCR](dev/local-ocr.md) | Chandra OCR 2 on the 5090: PDFs, images, verified weights in `~/AI` |
-| [Nix packaging](dev/nix-packaging.md) | `pkgs/`, overrides, patches, updating NInfer and Chandra |
+| [Nix packaging](dev/nix-packaging.md) | `pkgs/`, overrides, patches, updating NInfer, Chandra and Fluxer |
 
 ## security/
 

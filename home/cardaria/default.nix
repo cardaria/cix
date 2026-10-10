@@ -12,6 +12,7 @@
     ../../modules/home/apps/ghostty.nix
     ../../modules/home/apps/obsidian.nix
     ../../modules/home/apps/brave-origin.nix
+    ../../modules/home/apps/fluxer.nix
     ../../modules/home/apps/plex.nix
     ../../modules/home/apps/spotify.nix
     ../../modules/home/apps/teamspeak.nix
