@@ -24,7 +24,8 @@ The session variable takes effect in new login sessions; KDE defaults are
 read from its configuration.
 
 The live config is `dotfiles/ghostty/config.ghostty`, linked to
-`~/.config/ghostty/config.ghostty`. It sets the bundled theme and the font:
+`~/.config/ghostty/config.ghostty`. It sets the bundled theme and the font, and turns off the close
+confirmation and the clipboard-copy and config-reload popups:
 
 ```ini
 theme = GitHub Light High Contrast
