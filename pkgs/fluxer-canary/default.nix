@@ -5,6 +5,7 @@
   imagemagick,
   libappindicator,
   libnotify,
+  libva,
   speechd-minimal,
 }:
 let
@@ -27,6 +28,8 @@ appimageTools.wrapType2 {
   extraPkgs = _: [
     libappindicator
     libnotify
+    # Without it Chromium can't reach VA-API and decodes video on the CPU
+    libva
     speechd-minimal
   ];
 

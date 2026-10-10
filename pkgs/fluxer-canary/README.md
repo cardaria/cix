@@ -20,6 +20,8 @@ was written). x86_64-linux only.
   standard sizes (16 to 512) with ImageMagick;
 - the download URL points at `pkgs.fluxer.com`, where
   `api.canary.fluxer.app/dl/…` now redirects;
+- `libva` is added to the FHS environment; without it Chromium decodes video
+  on the CPU;
 - no `passthru.updateScript`, aarch64 or maintainer entry.
 
 `FLUXER_DISABLE_DESKTOP_FILE=1` stays set: without it the app writes its own

@@ -100,6 +100,8 @@ outside the AppImage's FHS environment. Leave the in-app autostart
 toggle alone. On start the app registers itself for `fluxer:` links with
 `xdg-mime` unless it already is the handler, which would replace the
 `mimeapps.list` link; the repo's list names it so that never runs.
+Home Manager writes `~/.config/fluxer-canary-flags.conf` with the same
+VA-API features as Brave, so video decodes on the GPU.
 
 **Plex:** to change the icon, replace `dotfiles/plex/assets/plex.png` (keep
 the credit in its README) and rebuild. Assets are copied into the store.
@@ -143,6 +145,7 @@ the desktop process access to the 5090, independently of these preferences.
 | Plex allocates memory or decodes on the 5090 | check that `~/.local/share/plex/mpv.conf` resolves to the repo's host config and sets `hwdec=vaapi-copy` plus `vaapi-device`, and that `/dev/dri/cix-desktop-render` exists; restart Plex, then check its row in `nvidia-smi` while playing |
 | Spotify has the stock look, or its panels stack vertically | quit Spotify, delete `~/.local/share/spotify-spicetify/.store`, start it again (rebuilds the copy and the backup) |
 | Fluxer doesn't start at login | is `~/.config/autostart/app.fluxer.FluxerDesktopCanary.desktop` a link into the store? A regular file means Fluxer rewrote it with the unwrapped path: delete it and switch again |
+| Fluxer warns that a screen share uses software decoding | quit it from the tray and start it from the launcher: its own restart keeps the old FHS environment |
 | Vesktop doesn't start at login | `systemctl --user status app-vesktop@autostart`; is `~/.config/autostart/vesktop.desktop` a link into the store? A regular file means Vesktop rewrote it: delete it and switch again |
 
 ## Related
