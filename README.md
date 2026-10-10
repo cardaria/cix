@@ -24,16 +24,12 @@ with Home Manager for everything on the user side.
   <tr>
     <th align="left">Host</th>
     <th align="left">Role</th>
-    <th align="left">CPU</th>
-    <th align="left">GPU</th>
-    <th align="left">Memory</th>
+    <th align="left">Specs</th>
   </tr>
   <tr>
     <td align="left"><code>draba</code></td>
     <td align="left">Workstation</td>
-    <td align="left"><a href="https://www.amd.com/en/products/processors/desktops/ryzen/9000-series/amd-ryzen-9-9950x3d.html">Ryzen 9 9950X3D</a></td>
-    <td align="left"><a href="https://www.gigabyte.com/Graphics-Card/GV-N5090AORUS-M-32GD">RTX 5090</a> · <a href="https://www.gigabyte.com/Graphics-Card/GV-N5060OC-8GL">RTX 5060</a></td>
-    <td align="left"><a href="https://www.corsair.com/us/en/p/memory/cmk96gx5m2e6000z36/vengeance-96gb-2x48gb-ddr5-dram-6000mt-s-cl36-amd-expo-intel-xmp-memory-kit-cmk96gx5m2e6000z36">96 GB DDR5</a></td>
+    <td align="left"><sub><a href="https://www.amd.com/en/products/processors/desktops/ryzen/9000-series/amd-ryzen-9-9950x3d.html">Ryzen 9 9950X3D</a> · <a href="https://www.gigabyte.com/Graphics-Card/GV-N5090AORUS-M-32GD">RTX 5090</a> + <a href="https://www.gigabyte.com/Graphics-Card/GV-N5060OC-8GL">RTX 5060</a> · <a href="https://www.corsair.com/us/en/p/memory/cmk96gx5m2e6000z36/vengeance-96gb-2x48gb-ddr5-dram-6000mt-s-cl36-amd-expo-intel-xmp-memory-kit-cmk96gx5m2e6000z36">96 GB DDR5</a></sub></td>
   </tr>
 </table>
 </div>
