@@ -21,6 +21,7 @@ Editors, Git UI, Nix language tooling and AI coding CLIs.
 | Lazygit | `development.nix` | none (defaults) |
 | fzf | `development.nix` | see [Shell](../desktop/shell.md) |
 | eza | `development.nix` | `ls` aliases, see [Shell](../desktop/shell.md) |
+| zoxide | `development.nix` | `cd` replacement, see [Shell](../desktop/shell.md) |
 | nixd, nixfmt | `development.nix` | the editor must be configured for nixd separately |
 | Claude Code | `development.nix` | handles `claude-cli:` links |
 | Codex | `development.nix` | n/a |

@@ -21,3 +21,7 @@ alias ls='eza'
 alias ll='eza -l'
 alias la='eza -la'
 alias lt='eza --tree'
+
+# --- zoxide ---
+# Replaces cd with the smart jump (cdi is the picker); original stays as builtin cd
+eval "$(zoxide init zsh --cmd cd)"

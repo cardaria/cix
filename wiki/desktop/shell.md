@@ -1,15 +1,15 @@
 ---
 title: Shell
 category: desktop
-tags: [zsh, fzf, eza, history, shell]
+tags: [zsh, fzf, eza, zoxide, history, shell]
 updated: 2026-10-10
 ---
 
 # Shell
 
-Zsh is the login shell, with fzf for fuzzy history and file search and eza in
-place of `ls`. The
-config is plain native zsh in `dotfiles/zsh/`, live-linked.
+Zsh is the login shell, with fzf for fuzzy history and file search, eza in
+place of `ls` and zoxide in place of `cd`. The config is plain native zsh in
+`dotfiles/zsh/`, live-linked.
 
 ## Layout
 
@@ -46,6 +46,10 @@ config is plain native zsh in `dotfiles/zsh/`, live-linked.
 | `lt` | `eza --tree` |
 
 The original `ls` stays available as `\ls` or `command ls`.
+
+`cd` is zoxide's: it still changes directory by path, and jumps to the best
+match from visited directories otherwise. `cdi` picks one interactively with
+fzf. The builtin stays available as `builtin cd`.
 
 ## Workflows
 

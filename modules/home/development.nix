@@ -11,6 +11,7 @@
     nixfmt
     vscode
     zed-editor
+    zoxide
   ];
   home.sessionVariables = {
     EDITOR = "zeditor --wait";
