@@ -3,6 +3,7 @@
   home.packages = with pkgs; [
     claude-code
     codex
+    eza
     fzf
     lazygit
     micro

@@ -1,13 +1,14 @@
 ---
 title: Shell
 category: desktop
-tags: [zsh, fzf, history, shell]
+tags: [zsh, fzf, eza, history, shell]
 updated: 2026-10-10
 ---
 
 # Shell
 
-Zsh is the login shell, with fzf for fuzzy history and file search. The
+Zsh is the login shell, with fzf for fuzzy history and file search and eza in
+place of `ls`. The
 config is plain native zsh in `dotfiles/zsh/`, live-linked.
 
 ## Layout
@@ -15,7 +16,7 @@ config is plain native zsh in `dotfiles/zsh/`, live-linked.
 | File | Linked to | Role |
 | --- | --- | --- |
 | `dotfiles/zsh/.zshenv` | `~/.zshenv` | sets `ZDOTDIR=~/.config/zsh`, loads Home Manager's session variables |
-| `dotfiles/zsh/.zshrc` | `~/.config/zsh/.zshrc` | prompt, history, fzf |
+| `dotfiles/zsh/.zshrc` | `~/.config/zsh/.zshrc` | prompt, history, fzf, aliases |
 
 - NixOS enables zsh and its completion support (`programs.zsh.enable` in
   `hosts/draba/configuration.nix`), and sets it as `cardaria`'s shell.
@@ -34,6 +35,17 @@ config is plain native zsh in `dotfiles/zsh/`, live-linked.
 | `Ctrl+R` | fuzzy search command history |
 | `Ctrl+T` | pick files and insert their paths |
 | `Alt+C` | pick a directory and `cd` into it |
+
+## Aliases
+
+| Alias | Runs |
+| --- | --- |
+| `ls` | `eza` |
+| `ll` | `eza -l` |
+| `la` | `eza -la` |
+| `lt` | `eza --tree` |
+
+The original `ls` stays available as `\ls` or `command ls`.
 
 ## Workflows
 
