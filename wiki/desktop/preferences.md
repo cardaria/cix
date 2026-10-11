@@ -50,8 +50,9 @@ switches the desktop together; there is no custom scroll script.
 
 ## Panel
 
-One top panel spans the screen, with a height of 32 logical px, no floating
-style, adaptive opacity and Dodge Windows hiding.
+One top panel spans the screen, with a height of 30 logical px, floating style,
+adaptive opacity and Windows Go Below hiding. Plasma un-floats an always-visible
+panel whenever a window touches it; this mode never does.
 
 The widget order is launcher, 20 px spacer, pager, 20 px spacer, icon-only
 task manager, 20 px spacer, margins separator, system tray, clock and

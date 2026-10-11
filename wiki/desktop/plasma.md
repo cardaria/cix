@@ -86,16 +86,31 @@ GPU queries use the fixed `nvidia-smi` grant ([GPU access](../architecture/gpu-a
 
 Krohnkite is a KWin script, installed in the user profile and enabled through
 `kwinrc` (`[Plugins] krohnkiteEnabled=true`), because plasma-manager has no
-option for it. Gaps (10 logical px at the screen edges and between windows,
-15 physical at 150%) are declared in `kwinrc` `[Script-krohnkite]`.
+option for it. Gaps are `gap` = 8 logical px (12 physical at 150%) at the sides,
+bottom and between windows, matching the floating panel's own margin. The top
+gap follows the panel, set by `panelHeight`, `panelFloating` and `panelHiding`
+in `plasma.nix`, which drive both the panel and `kwinrc` `[Script-krohnkite]`:
+
+| `panelHiding` | Reserves | Top gap |
+| --- | --- | --- |
+| `windowsgobelow`, floating | nothing | `panelHeight + 2 * gap`, so windows clear the bar |
+| `windowsgobelow`, not floating | nothing | `panelHeight + gap` |
+| `normalpanel`, floating | the bar height | `2 * gap`, but Plasma un-floats this panel next to windows |
+| `normalpanel`, not floating | the bar height | `gap` |
+| `autohide`, `dodgewindows` | nothing, the panel overlays windows | `gap` |
+
+Reserved areas were measured from KWin for `normalpanel` and `windowsgobelow`;
+`autohide` and `dodgewindows` follow the Plasma source. Panel changes therefore
+need no gap edits. Changing floating or hiding live in
+Plasma is not followed; edit `plasma.nix`.
 A lone tiled window is centered at 60% of the available width and 100% of
 the available height (`soleWindowWidth=60`, `soleWindowHeight=100`), using
 Krohnkite's built-in options. The local patch in `pkgs/krohnkite/` applies
-the declared screen-edge gaps after sizing that window, preserving 10 px
+the declared screen-edge gaps after sizing that window, keeping the
 top and bottom padding. Multiple tiles keep their usual gaps. Monocle's
 default maximize setting takes precedence, as does the sole-window "No
 Gaps" option (leave it off to use percentages and padding).
-A second patch re-tiles when the work area changes, so a window opened at
+A second patch re-tiles when the panel appears, so a window opened at
 login before the panel exists is moved out from under it.
 
 Other settings stay in System Settings → Window Management → KWin Scripts
@@ -139,7 +154,8 @@ declared as `Meta+!`, `Meta+"` and `Meta+#`.
 
 ## Panel
 
-Top panel, 32 px high, with Dodge Windows hiding. Layout, spacers, tray
+Top panel, 30 px high, floating, with Windows Go Below hiding: it stays floating
+and visible, and Krohnkite keeps a fixed gap under it. Layout, spacers, tray
 choices and rebuild behavior: [Preferences](preferences.md#panel).
 
 ## Display and scaling

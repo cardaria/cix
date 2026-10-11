@@ -5,6 +5,26 @@
   osConfig,
   ...
 }:
+let
+  panelHeight = 30;
+  panelFloating = true;
+
+  # normalpanel, autohide, dodgewindows or windowsgobelow
+  panelHiding = "windowsgobelow";
+
+  # Logical px; 8 is the floating panel's own margin
+  gap = 8;
+
+  # Reserved strip by mode (measured): normalpanel = bar height, windowsgobelow = none.
+  # autohide and dodgewindows overlay windows and reserve nothing
+  topGap =
+    if panelHiding == "windowsgobelow" then
+      panelHeight + (if panelFloating then 2 * gap else gap)
+    else if panelHiding == "normalpanel" && panelFloating then
+      2 * gap
+    else
+      gap;
+in
 {
   home.packages = [ cixPkgs.krohnkite ];
   home.sessionVariables.TERMINAL = "ghostty";
@@ -93,23 +113,22 @@
         soleWindowWidth = 60;
         soleWindowHeight = 100;
 
-        # Logical px: 15 physical at 150%
-        screenGapLeft = 10;
-        screenGapRight = 10;
-        screenGapTop = 10;
-        screenGapBottom = 10;
-        screenGapBetween = 10;
+        screenGapLeft = gap;
+        screenGapRight = gap;
+        screenGapTop = topGap;
+        screenGapBottom = gap;
+        screenGapBetween = gap;
       };
     };
 
     panels = [
       {
         location = "top";
-        height = 32;
+        height = panelHeight;
         alignment = "center";
         lengthMode = "fill";
-        hiding = "dodgewindows";
-        floating = false;
+        hiding = panelHiding;
+        floating = panelFloating;
         opacity = "adaptive";
         widgets = [
           "org.kde.plasma.kickoff"

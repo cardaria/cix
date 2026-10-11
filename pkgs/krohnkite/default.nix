@@ -4,6 +4,6 @@ kdePackages.krohnkite.overrideAttrs (old: {
     # Sole-window percentages bypass screen gaps upstream
     ./sole-window-gaps.patch
     # Windows opened before the panel exists stay under it
-    ./retile-on-work-area.patch
+    ./retile-on-dock.patch
   ];
 })
