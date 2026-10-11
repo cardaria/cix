@@ -73,6 +73,7 @@ desktop/login.md:
 desktop/preferences.md:
   sources:
     - modules/home/wayland/plasma.nix
+    - modules/home/wayland/icons.nix
     - hosts/draba/input.nix
   memory: []
 

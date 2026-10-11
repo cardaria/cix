@@ -49,7 +49,7 @@ in
 
     workspace = {
       colorScheme = "BreezeLight";
-      iconTheme = "breeze";
+      iconTheme = "Colloid-cix";
       widgetStyle = "Breeze";
       cursor.theme = "breeze_cursors";
       windowDecorations = {

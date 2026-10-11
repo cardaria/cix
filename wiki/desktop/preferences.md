@@ -2,7 +2,7 @@
 title: Preferences
 category: desktop
 tags: [plasma, kde, preferences, appearance, input, panel]
-updated: 2026-10-10
+updated: 2026-10-11
 ---
 
 # Preferences
@@ -20,7 +20,8 @@ an explicit declaration to survive a reinstall.
 | Preference | Saved value |
 | --- | --- |
 | Colour scheme | Breeze Light |
-| Icons, widgets, window decorations | Breeze |
+| Icons | Colloid Light, plus aliases for apps it lacks (below) |
+| Widgets, window decorations | Breeze |
 | Cursor theme | Breeze cursors |
 | Animation duration | 0.5× the default duration |
 | Smooth scrolling | off |
@@ -32,6 +33,27 @@ an explicit declaration to survive a reinstall.
 The selected wallpaper is referenced by its path under `Pictures/Wallpapers`.
 The image itself is outside Git; restore Pictures from backup on a new
 installation. Purchased fonts also remain outside Git ([Terminal](../apps/terminal.md)).
+
+## Icons
+
+`modules/home/wayland/icons.nix` installs Colloid and builds a small
+`Colloid-cix` theme on top of Colloid Light. Lookups fall back to Colloid, then
+Breeze, then hicolor. The theme only holds aliases for app icon names Colloid
+lacks, each pointing at the closest Colloid icon. The launcher button is the exception: Colloid draws it as an Apple logo, so the theme links Breeze's Plasma logo instead.
+
+| App | Icon name | Shown as |
+| --- | --- | --- |
+| Brave Origin | `brave-origin` | Brave |
+| Fluxer Canary | `fluxer-canary` | generic chat |
+| Haruna | `haruna` | Haruna |
+| Micro | `micro` | Micro |
+| Merkuro Calendar | `org.kde.merkuro.calendar` | Kalendar |
+| TeamSpeak 6 | `teamspeak6-client` | TeamSpeak |
+| Vesktop | `vesktop` | Discord |
+
+A new app without a Colloid icon gets one line in `aliases`. Plex keeps its own
+icon by absolute path ([Media](../apps/media.md)). Plasma stores the theme in
+`kdeglobals`.
 
 ## Windows and mouse actions
 

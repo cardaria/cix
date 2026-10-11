@@ -20,6 +20,7 @@
     ../../modules/home/apps/plasma-systemmonitor.nix
     ../../modules/home/wayland/plasma.nix
     ../../modules/home/wayland/appearance.nix
+    ../../modules/home/wayland/icons.nix
   ];
 
   # Absolute string on purpose: a Nix path would copy dotfiles into the store
