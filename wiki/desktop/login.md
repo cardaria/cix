@@ -35,6 +35,12 @@ sequenceDiagram
   `~/.config/kcminputrc` to `/var/lib/plasmalogin/.config/` at boot, and a
   path unit runs it again whenever System Settings saves the file. The next
   time the login screen starts, it uses the new speed.
+- The wallpaper follows the desktop: `plasmalogin-wallpaper.service` reads the
+  image path from `~/.config/plasma-org.kde.plasma.desktop-appletsrc` and
+  copies the image to `/var/lib/plasmalogin/wallpaper`. It then writes the
+  setting to `/etc/plasmalogin.conf`, the file the greeter reads. A path unit
+  runs it again whenever Plasma rewrites that file, so a new wallpaper needs no
+  rebuild; the login screen shows it the next time it starts.
 - Settings go to `/etc/plasmalogin.conf.d/99-user.conf` through
   `services.displayManager.plasma-login-manager.settings` (none are set).
 - The greeter's KWin is pinned to the 5060 by a drop-in on
@@ -85,6 +91,7 @@ which ends the graphical session. Save your work, log out, switch to TTY2
 | Black screen for seconds around login | a mode switch: compare `video=` in `hosts/draba/graphics.nix` with `kscreen-doctor -o` |
 | KWallet asks for a password after login | the wallet password differs from the account password; change it in KWallet Manager |
 | Login screen mouse speed differs from the desktop | `systemctl status plasmalogin-input-settings.path plasmalogin-input-settings.service`; the greeter picks up a copy only when it starts |
+| Login wallpaper differs from the desktop | `systemctl status plasmalogin-wallpaper.path plasmalogin-wallpaper.service`; `/etc/plasmalogin.conf` should point at `/var/lib/plasmalogin/wallpaper` |
 | Wrong keyboard layout at the greeter | `localectl status` should show X11 layout `se` |
 
 ## Related

@@ -140,8 +140,8 @@ with Plasma's are unbound, and so are the Plasma defaults on the same keys.
 | `Meta+Shift+←/→/↑/↓` | move window in the layout (Krohnkite) |
 | `Meta+-` / `Meta+Shift+0` | narrower / wider (Krohnkite) |
 | `Meta+Tab` / `Meta+W` | Overview |
-| `Meta+1…3` | switch to desktop 1–3 (one row, fade transition) |
-| `Meta+Shift+1…3` | move window to desktop 1–3 |
+| `Meta+1…4` | switch to desktop 1–4 (one row, fade transition) |
+| `Meta+Shift+1…4` | move window to desktop 1–4 |
 | `Meta+V` | clipboard history (Klipper) |
 | `Meta+L` | lock |
 | `Meta+Escape` / `Meta+Shift+E` | log out dialog |
@@ -150,7 +150,7 @@ with Plasma's are unbound, and so are the Plasma defaults on the same keys.
 
 KWin hands global shortcuts the symbol a key produces: on the Swedish layout
 `Meta+Shift+1` arrives as `Meta+!`, so the move-to-desktop bindings are
-declared as `Meta+!`, `Meta+"` and `Meta+#`.
+declared as `Meta+!`, `Meta+"`, `Meta+#` and `Meta+¤`.
 
 ## Panel
 

@@ -91,7 +91,7 @@ in
 
     input.keyboard.layouts = [ { layout = "se"; } ];
     kwin.virtualDesktops = {
-      number = 3;
+      number = 4;
       rows = 1;
     };
     kwin.effects.desktopSwitching.animation = "fade";
@@ -239,10 +239,12 @@ in
         "Switch to Desktop 1" = "Meta+1";
         "Switch to Desktop 2" = "Meta+2";
         "Switch to Desktop 3" = "Meta+3";
+        "Switch to Desktop 4" = "Meta+4";
         # KWin consumes Shift into the symbol: Meta+Shift+1 arrives as Meta+! on the se layout
         "Window to Desktop 1" = "Meta+!";
         "Window to Desktop 2" = "Meta+\"";
         "Window to Desktop 3" = "Meta+#";
+        "Window to Desktop 4" = "Meta+¤";
 
         KrohnkiteFocusLeft = "Meta+Left";
         KrohnkiteFocusRight = "Meta+Right";
