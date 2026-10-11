@@ -6,6 +6,8 @@
   ...
 }:
 let
+  wallpaper = "${config.home.homeDirectory}/Pictures/Wallpapers/art-institute-of-chicago-ytS2Y6cI9sY-unsplash.jpg";
+
   panelHeight = 30;
   panelFloating = true;
 
@@ -56,8 +58,10 @@ in
         library = "org.kde.breeze";
         theme = "Breeze";
       };
-      wallpaper = "${config.home.homeDirectory}/Pictures/Wallpapers/art-institute-of-chicago-ytS2Y6cI9sY-unsplash.jpg";
+      inherit wallpaper;
     };
+    # Same image as the desktop
+    kscreenlocker.appearance.wallpaper = wallpaper;
     configFile.kdeglobals = {
       General = {
         UseSystemBell = true;

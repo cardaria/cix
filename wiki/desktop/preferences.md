@@ -30,7 +30,8 @@ an explicit declaration to survive a reinstall.
 | Cursor shake effect | off |
 | Desktop transition | fade |
 
-The selected wallpaper is referenced by its path under `Pictures/Wallpapers`; the login screen follows it ([Login](login.md)).
+The selected wallpaper is referenced by its path under `Pictures/Wallpapers`; the lock screen uses the same image, set from one shared value in
+`plasma.nix`, and the login screen follows it ([Login](login.md)).
 The image itself is outside Git; restore Pictures from backup on a new
 installation. Purchased fonts also remain outside Git ([Terminal](../apps/terminal.md)).
 
