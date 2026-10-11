@@ -95,6 +95,8 @@ the declared screen-edge gaps after sizing that window, preserving 10 px
 top and bottom padding. Multiple tiles keep their usual gaps. Monocle's
 default maximize setting takes precedence, as does the sole-window "No
 Gaps" option (leave it off to use percentages and padding).
+A second patch re-tiles when the work area changes, so a window opened at
+login before the panel exists is moved out from under it.
 
 Other settings stay in System Settings → Window Management → KWin Scripts
 → Krohnkite → Options (including the Sole Window controls). After changing

@@ -11,6 +11,9 @@ gaps after sizing the lone tiled window by percentage. At 60% width and
 padding. Multiple tiles, Monocle maximize and sole-window "No Gaps" retain
 their upstream behavior.
 
+`retile-on-work-area.patch` re-tiles when KWin's work area changes, so a window
+opened at login before the panel exists moves out from under it.
+
 **Build:** `nix build .#krohnkite --no-link`.
 
 **Upstream:** not submitted.

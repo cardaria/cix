@@ -1,0 +1,23 @@
+diff --git a/src/driver/kwin/kwindriver.ts b/src/driver/kwin/kwindriver.ts
+--- a/src/driver/kwin/kwindriver.ts
++++ b/src/driver/kwin/kwindriver.ts
+@@ -362,6 +362,12 @@ class KWinDriver implements IDriverContext {
+       this.control.onSurfaceUpdate(this);
+     });
+ 
++    // Panels reserve their area after login, once windows are already tiled
++    if (this.workspace.workAreaChanged)
++      this.connect(this.workspace.workAreaChanged, () => {
++        this.control.onSurfaceUpdate(this);
++      });
++
+     this.connect(
+       this.workspace.currentActivityChanged,
+       (activityId: string) => {
+diff --git a/src/extern/workspace.kwin.d.ts b/src/extern/workspace.kwin.d.ts
+--- a/src/extern/workspace.kwin.d.ts
++++ b/src/extern/workspace.kwin.d.ts
+@@ -32,2 +32,3 @@ interface Workspace {
+   virtualScreenGeometryChanged: QSignal;
++  workAreaChanged?: QSignal;
+   currentDesktopChanged: QSignal; // (desktop: IVirtualDesktop)
