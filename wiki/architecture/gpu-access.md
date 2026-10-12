@@ -2,7 +2,7 @@
 title: GPU access
 category: architecture
 tags: [gpu, nvidia, cuda, permissions, compute]
-updated: 2026-10-10
+updated: 2026-10-12
 ---
 
 # GPU access
@@ -11,6 +11,10 @@ The RTX 5090 is restricted to explicitly approved compute workloads;
 desktop rendering uses the RTX 5060 and hardware monitoring remains available.
 
 ## One permission boundary
+
+This applies to the default boot entry. In `display-5090` the 5090 drives the
+desktop and the udev rule, permission service and device lock-down are not
+installed; the group, sudo grants and `nvidia-smi` wrapper stay.
 
 `hosts/draba/compute.nix` owns the policy. The 5090's NVIDIA device,
 DRM card and render node belong to `root:cix-compute`, with mode `0660`.

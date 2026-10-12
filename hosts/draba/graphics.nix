@@ -1,23 +1,20 @@
-# RTX 5060 LP drives the desktop; RTX 5090 is CUDA only
+# RTX 5060 LP drives the desktop by default; RTX 5090 is CUDA only
 {
   cixPkgs,
+  config,
   lib,
   pkgs,
   ...
 }:
 let
-  # The 5060's PCI identity, shared by the selector and the udev link
-  ids = {
-    vendor = "0x10de";
-    device = "0x2d05";
-    subsystemVendor = "0x1458";
-    subsystemDevice = "0x41a1";
-  };
+  cfg = config.cix;
+  # The selected card's PCI identity, shared by the selector and the udev link
+  ids = cfg.gpus.${cfg.displayGpu};
   desktopGpu = pkgs.writeShellApplication {
     name = "cix-desktop-gpu";
     runtimeInputs = [ pkgs.coreutils ];
     runtimeEnv = {
-      DESKTOP_GPU_NAME = "RTX 5060 LP";
+      DESKTOP_GPU_NAME = ids.name;
       # In the order the selector reads them from sysfs
       DESKTOP_GPU_IDS = "${ids.vendor} ${ids.device} ${ids.subsystemVendor} ${ids.subsystemDevice}";
       DESKTOP_GPU_DRIVER = "nvidia";
@@ -26,10 +23,49 @@ let
   };
 in
 {
-  # Both cards are Blackwell, so CUDA tools pin the 5090 by UUID
-  options.cix.computeGpu = lib.mkOption {
-    type = lib.types.str;
-    description = "CUDA UUID of the compute GPU";
+  options.cix = {
+    # Both cards are Blackwell, so CUDA tools pin the 5090 by UUID
+    computeGpu = lib.mkOption {
+      type = lib.types.str;
+      description = "CUDA UUID of the compute GPU";
+    };
+
+    gpus = lib.mkOption {
+      type = lib.types.attrsOf (lib.types.attrsOf lib.types.str);
+      readOnly = true;
+      description = "PCI identity of each GPU";
+      default = {
+        rtx5060 = {
+          name = "RTX 5060 LP";
+          vendor = "0x10de";
+          device = "0x2d05";
+          subsystemVendor = "0x1458";
+          subsystemDevice = "0x41a1";
+        };
+        rtx5090 = {
+          name = "RTX 5090";
+          vendor = "0x10de";
+          device = "0x2b85";
+          subsystemVendor = "0x1458";
+          subsystemDevice = "0x416e";
+        };
+      };
+    };
+
+    displayGpu = lib.mkOption {
+      type = lib.types.enum [
+        "rtx5060"
+        "rtx5090"
+      ];
+      default = "rtx5060";
+      description = "GPU that drives the desktop; the 5090 is compute-only unless chosen here";
+    };
+
+    consoleMode = lib.mkOption {
+      type = lib.types.str;
+      default = "3840x2160@160";
+      description = "Kernel video= mode for the console, in KWin's mode on the display GPU's link";
+    };
   };
 
   config = {
@@ -43,7 +79,7 @@ in
       "nvidia_drm"
     ];
     # Console in KWin's mode (the 5060's DisplayPort): no mode switch up to the desktop
-    boot.kernelParams = [ "video=3840x2160@160" ];
+    boot.kernelParams = [ "video=${cfg.consoleMode}" ];
     # Also used by Plex's wrapper to pick the desktop GPU
     environment.systemPackages = [ desktopGpu ];
     # A fixed render-node path for apps configured with a device file (Plex's mpv.conf)
@@ -95,6 +131,14 @@ in
     };
 
     cix.computeGpu = "GPU-a7c189ed-f232-10af-2df2-4346c69a5e09";
+
+    # Boot entry for the monitor's HDMI input, cabled to the 5090; the 5060 idles
+    specialisation.display-5090.configuration = {
+      cix.displayGpu = "rtx5090";
+      # HDMI may not carry 160 Hz; set the rate once measured on this link
+      cix.consoleMode = "3840x2160";
+      system.nixos.tags = [ "display-5090" ];
+    };
 
     hardware.nvidia = {
       branch = "latest";

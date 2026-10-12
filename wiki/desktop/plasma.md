@@ -2,7 +2,7 @@
 title: Plasma
 category: desktop
 tags: [plasma, kwin, krohnkite, plasma-manager, shortcuts, scaling, gpu]
-updated: 2026-10-10
+updated: 2026-10-12
 ---
 
 # Plasma
@@ -181,6 +181,7 @@ At boot `cix-desktop-gpu` selects the RTX 5060 LP and writes
 `/run/cix-desktop-gpu/kwin.env`: `KWIN_DRM_DEVICES` limits outputs to that card;
 `KWIN_RENDER_NODES` limits rendering to its render node. The greeter reads a
 unit drop-in; the session sources `/etc/xdg/plasma-workspace/env/cix-desktop-gpu.sh`.
+In the `display-5090` boot entry (`cix.displayGpu`) it selects the RTX 5090 instead.
 If exactly one matching card isn't found, the service and login fail. See
 [draba](../architecture/draba.md#two-gpus-two-jobs) for selection and
 [GPU access](../architecture/gpu-access.md) for 5090 permissions.

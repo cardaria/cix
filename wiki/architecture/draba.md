@@ -2,7 +2,7 @@
 title: draba
 category: architecture
 tags: [hardware, gpu, nvidia, disko, btrfs]
-updated: 2026-10-10
+updated: 2026-10-12
 ---
 
 # draba
@@ -25,8 +25,12 @@ and a dual-boot disk layout.
 
 Don't change these without the user asking:
 
-- The desktop runs on the RTX 5060 over DisplayPort; the RTX 5090 stays
-  compute-only. KWin is pinned to the 5060 through `cix-desktop-gpu`.
+- The default boot entry runs the desktop on the RTX 5060 over DisplayPort; the
+  RTX 5090 stays compute-only. KWin is pinned to the 5060 through `cix-desktop-gpu`.
+  The `display-5090` entry is the only exception (see below).
+- From `display-5090`, never activate the base closure (`test`/`switch`); activate
+  `<out>/specialisation/display-5090` instead. The base moves the desktop to the
+  5060 under the running session and leaves a dead screen.
 - The UI size is 150%, set only by KWin's fractional scale.
 - Disko owns only the disk in `hosts/draba/storage.nix`; the Windows disk is never touched.
 - GRUB keeps the Windows entry (os-prober) and `configurationLimit = 4` for the 1 GB ESP.
@@ -51,6 +55,15 @@ Don't change these without the user asking:
   ordering and an environment variable do not grant device permissions.
   `CUDA_VISIBLE_DEVICES` is not set session-wide: Brave's video decoding runs on the
   desktop GPU.
+- **Display on the 5090 (boot entry `display-5090`):** a NixOS specialisation sets
+  `cix.displayGpu = "rtx5090"`. Switch the monitor to its HDMI input (the 5090's
+  cable) and pick the entry in GRUB; the default entry and the DisplayPort input
+  are unchanged. `cix-desktop-gpu` then selects the 5090, so KWin, the greeter and
+  the `cix-desktop-render` link follow it, and the 5090 access boundary
+  ([GPU access](gpu-access.md)) is off, because KWin must open the card behind the
+  screen. LLM and OCR still pin the 5090 by UUID. The 5060 idles. Both entries
+  share one kernel and initrd, so the 1 GB ESP is not doubled. The console mode
+  (`cix.consoleMode`) is `3840x2160` there until the HDMI refresh rate is measured.
 - The 5060's slot hangs off the second chipset chip and is wired **PCIe 3.0 ×2**
   (≈2 GB/s), shared upstream with the Windows SSD, Wi-Fi, NIC and USB. The
   Gen 4 ×8 slot would sit under the 5090's fans. The desktop runs fine, but
@@ -156,6 +169,7 @@ Then `systemctl --failed` should be empty.
 | Symptom | Check |
 | --- | --- |
 | Black screen after login | is the cable on the 5060's DisplayPort? `journalctl --user -b -u plasma-kwin_wayland` |
+| Dead screen or `no outputs` right after a switch | you were in `display-5090` and activated the base, which moves the desktop to the 5060 and locks the 5090. Power-cycle and boot `display-5090` again; apply changes with `<out>/specialisation/display-5090/bin/switch-to-configuration test` ([Deployment](../deployment.md#booted-into-a-specialisation)) |
 | An app lags the whole desktop | check `nvidia-smi` for GPU usage and process allocations; cross-GPU frame copies can saturate the 5060's link |
 | Desktop stutters while screen sharing | the ×2 slot is full: `nvidia-smi dmon -i 1 -s t` shows `txpci` near 1.9 GB/s. Share a smaller window or 30 fps |
 | `cix-desktop-gpu` errors (no login manager) | `lspci -nnk \| grep -A3 VGA`. Is the 5060 bound to `nvidia`? Its PCI IDs changed if the card was replaced |

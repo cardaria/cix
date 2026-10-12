@@ -52,59 +52,69 @@ let
       done
     '';
   };
+  gpu = config.cix.gpus.rtx5090;
   rules = pkgs.writeTextDir "lib/udev/rules.d/72-cix-compute-gpu.rules" ''
-    SUBSYSTEM=="drm", ATTRS{vendor}=="0x10de", ATTRS{device}=="0x2b85", ATTRS{subsystem_vendor}=="0x1458", ATTRS{subsystem_device}=="0x416e", GROUP:="cix-compute", MODE:="0660", TAG-="uaccess"
+    SUBSYSTEM=="drm", ATTRS{vendor}=="${gpu.vendor}", ATTRS{device}=="${gpu.device}", ATTRS{subsystem_vendor}=="${gpu.subsystemVendor}", ATTRS{subsystem_device}=="${gpu.subsystemDevice}", GROUP:="cix-compute", MODE:="0660", TAG-="uaccess"
   '';
 in
 {
-  users.groups.cix-compute = { };
-
-  # Only the fixed NVIDIA monitoring binary receives the GPU group, never root
-  security.wrappers.nvidia-smi = {
-    source = "${lib.getBin config.hardware.nvidia.package}/bin/nvidia-smi";
-    owner = "root";
-    group = "cix-compute";
-    setgid = true;
-  };
-
-  # NVIDIA otherwise restores its device nodes to world-writable on use
-  hardware.nvidia.moduleParams.nvidia.NVreg_ModifyDeviceFiles = 0;
-  services.udev.packages = [ rules ];
-  # Run after NixOS creates the NVIDIA character devices
-  services.udev.extraRules = lib.mkAfter ''
-    KERNEL=="nvidia", RUN+="${lib.getExe permissions} --nvidia-only"
-  '';
-  systemd.services.cix-compute-gpu-permissions = {
-    description = "Restrict the compute GPU to approved workloads";
-    before = [
-      "display-manager.service"
-      "systemd-user-sessions.service"
-    ];
-    requiredBy = [
-      "display-manager.service"
-      "systemd-user-sessions.service"
-    ];
-    after = [ "systemd-udev-trigger.service" ];
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-      ExecStartPre = "${pkgs.systemd}/bin/udevadm settle --timeout=10";
-      ExecStart = lib.getExe permissions;
-    };
-  };
-
-  # Change only the group; compute jobs retain the user's files and ownership
-  security.sudo.extraRules = [
+  config = lib.mkMerge [
     {
-      users = [ "cardaria" ];
-      runAs = "cardaria:cix-compute";
-      commands = map (program: {
-        command = lib.getExe program;
-        options = [
-          "NOPASSWD"
-          "NOSETENV"
-        ];
-      }) (builtins.attrValues config.home-manager.users.cardaria.cix.computeEntrypoints);
+      users.groups.cix-compute = { };
+
+      # Only the fixed NVIDIA monitoring binary receives the GPU group, never root
+      security.wrappers.nvidia-smi = {
+        source = "${lib.getBin config.hardware.nvidia.package}/bin/nvidia-smi";
+        owner = "root";
+        group = "cix-compute";
+        setgid = true;
+      };
+
+      # NVIDIA otherwise restores its device nodes to world-writable on use
+      # Also in the display-5090 entry, so both entries share one initrd on the small ESP
+      hardware.nvidia.moduleParams.nvidia.NVreg_ModifyDeviceFiles = 0;
+
+      # Change only the group; compute jobs retain the user's files and ownership
+      security.sudo.extraRules = [
+        {
+          users = [ "cardaria" ];
+          runAs = "cardaria:cix-compute";
+          commands = map (program: {
+            command = lib.getExe program;
+            options = [
+              "NOPASSWD"
+              "NOSETENV"
+            ];
+          }) (builtins.attrValues config.home-manager.users.cardaria.cix.computeEntrypoints);
+        }
+      ];
     }
+
+    # Off when the 5090 drives the desktop: KWin must open the card behind the screen
+    (lib.mkIf (config.cix.displayGpu != "rtx5090") {
+      services.udev.packages = [ rules ];
+      # Run after NixOS creates the NVIDIA character devices
+      services.udev.extraRules = lib.mkAfter ''
+        KERNEL=="nvidia", RUN+="${lib.getExe permissions} --nvidia-only"
+      '';
+      systemd.services.cix-compute-gpu-permissions = {
+        description = "Restrict the compute GPU to approved workloads";
+        before = [
+          "display-manager.service"
+          "systemd-user-sessions.service"
+        ];
+        requiredBy = [
+          "display-manager.service"
+          "systemd-user-sessions.service"
+        ];
+        after = [ "systemd-udev-trigger.service" ];
+        serviceConfig = {
+          Type = "oneshot";
+          RemainAfterExit = true;
+          ExecStartPre = "${pkgs.systemd}/bin/udevadm settle --timeout=10";
+          ExecStart = lib.getExe permissions;
+        };
+      };
+    })
   ];
 }
