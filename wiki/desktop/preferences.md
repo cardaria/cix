@@ -40,7 +40,8 @@ installation. Purchased fonts also remain outside Git ([Terminal](../apps/termin
 `modules/home/wayland/icons.nix` installs Colloid and builds a small
 `Colloid-cix` theme on top of Colloid Light. Lookups fall back to Colloid, then
 Breeze, then hicolor. The theme only holds aliases for app icon names Colloid
-lacks, each pointing at the closest Colloid icon. The launcher button is the exception: Colloid draws it as an Apple logo, so the theme links Breeze's Plasma logo instead.
+lacks, each pointing at the closest Colloid icon. The launcher button is the exception: Colloid draws it as an Apple logo, so the theme links Breeze's Plasma logo instead. The tray microphone indicator (`microphone-sensitivity-*`) is Colloid's
+22px mic scaled to about 80% so it matches the speaker's size.
 
 | App | Icon name | Shown as |
 | --- | --- | --- |

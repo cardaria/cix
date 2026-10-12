@@ -22,18 +22,27 @@ let
     start-here-kde-plasma-symbolic = "22/start-here-kde-plasma-symbolic.svg";
   };
 
+  # Colloid's mic fills the whole 22px box while the speaker is smaller; shrink it to match
+  micStatus = "${pkgs.colloid-icon-theme}/share/icons/Colloid-Light/status/22";
+  mics = {
+    microphone-sensitivity-high = "mic-on";
+    microphone-sensitivity-medium = "microphone-sensitivity-medium";
+    microphone-sensitivity-low = "microphone-sensitivity-low";
+    microphone-sensitivity-muted = "mic-off";
+  };
+
   link = source: name: "ln -s ${source} $theme/apps/scalable/${name}.svg";
 
   # Light variant to match the Breeze Light scheme; falls back to Breeze, then hicolor
   colloidCix = pkgs.runCommand "colloid-cix-icon-theme" { } ''
     theme=$out/share/icons/Colloid-cix
-    mkdir -p $theme/apps/scalable
+    mkdir -p $theme/apps/scalable $theme/status/22
     cat > $theme/index.theme <<THEME
     [Icon Theme]
     Name=Colloid-cix
     Comment=Colloid Light plus aliases for apps it has no icon for
     Inherits=Colloid-Light
-    Directories=apps/scalable
+    Directories=apps/scalable,status/22
 
     [apps/scalable]
     Size=128
@@ -41,10 +50,21 @@ let
     MaxSize=512
     Type=Scalable
     Context=Applications
+
+    [status/22]
+    Size=22
+    Context=Status
+    Type=Fixed
     THEME
     ${lib.concatStringsSep "\n" (
       lib.mapAttrsToList (name: target: link "${colloid}/${target}.svg" name) aliases
       ++ lib.mapAttrsToList (name: file: link "${breeze}/${file}" name) launcher
+    )}
+    ${lib.concatStringsSep "\n" (
+      lib.mapAttrsToList (
+        name: file:
+        "sed 's/width=\"22\" height=\"22\"/& viewBox=\"-2.5 -2.5 27 27\"/' ${micStatus}/${file}.svg > $theme/status/22/${name}.svg"
+      ) mics
     )}
   '';
 in
