@@ -55,6 +55,8 @@ let
       HF_HUB_DISABLE_TELEMETRY = "1";
       DO_NOT_TRACK = "1";
       TRITON_LIBCUDA_PATH = "/run/opengl-driver/lib";
+      # Kernel cache under XDG instead of ~/.triton
+      TRITON_CACHE_DIR = "${config.xdg.cacheHome}/triton";
       CC = "${pkgs.stdenv.cc}/bin/cc";
     };
     text = ''

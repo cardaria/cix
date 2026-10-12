@@ -17,6 +17,7 @@ with the official Chandra OCR 2 model on the RTX 5090.
 | `modules/home/ocr/` | CLI defaults and verified model download |
 | `pkgs/chandra-ocr/` | native Python application and CUDA dependencies |
 | `~/AI/ocr/models/chandra-ocr-2/<revision>/` | weights, processor, tokenizer and model licence |
+| `~/.cache/triton/` | compiled Triton kernels (a cache; safe to delete) |
 | output directory you choose | extracted documents and images |
 
 The model uses full BF16 precision. There is no GPU service at login: each
