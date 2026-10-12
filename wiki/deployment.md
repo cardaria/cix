@@ -75,6 +75,22 @@ TTY2 ([Login](desktop/login.md#workflows)). plasma-manager writes Plasma
 settings at activation; KWin and plasmashell pick most of them up at the
 next login.
 
+### Booted into a specialisation
+
+`readlink -f /run/current-system` names the entry you booted (on draba the path
+contains `display-5090`). Never activate the base closure from there: it
+switches the display GPU, stops the login manager and locks the card behind
+your screen, which leaves a dead screen. Activate the specialisation's own
+closure instead:
+
+```sh
+sudo "$cix_candidate/specialisation/display-5090/bin/switch-to-configuration" test   # running session only
+sudo "$cix_candidate/bin/switch-to-configuration" boot                               # base stays the GRUB default
+```
+
+Run `dry-activate` first: if it lists `plasmalogin` or `cix-desktop-gpu`, you
+are about to change the display GPU.
+
 ## Live dotfiles
 
 Edit `dotfiles/<app>/…`, then reload the app. No rebuild is needed:
@@ -132,6 +148,7 @@ Commit KWin display-config churn (`dotfiles/kwin/`) separately as `chore(kwin): 
 | "path does not exist" for a new file | `git add` it (Git flakes skip untracked files) |
 | "would be clobbered" during activation | an unmanaged file is in the way. Move it aside |
 | Rebooted after `test` and the change is gone | expected: `test` isn't persistent. Use `switch` |
+| Dead screen right after `test`/`switch` | you were booted into a specialisation and activated the base. Power-cycle, pick the same GRUB entry, then see [Booted into a specialisation](#booted-into-a-specialisation) |
 | Something broke after `switch` | `sudo nixos-rebuild switch --rollback --no-reexec`, or pick an older entry in GRUB |
 
 ## Related

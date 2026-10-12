@@ -111,6 +111,13 @@ Report each level separately. A lower level **never** proves a higher one.
   or key operations, and Git history rewrites. Preparation is not approval.
   Existing approval covers only an unchanged scope.
 - Never commit plaintext credentials or private keys. Don't rotate keys during cleanup.
+- Before any `test`, `switch` or `boot`, run `readlink -f /run/current-system`.
+  If the path contains a specialisation tag (`draba`: `display-5090`), you are
+  booted into that entry: activate the specialisation's own closure
+  (`<out>/specialisation/<name>/bin/switch-to-configuration test`), never the
+  base `<out>`. Activating the base from a specialisation swaps the display GPU
+  under the running session and leaves a dead screen (2026-10-12). See
+  [wiki/deployment.md](wiki/deployment.md#booted-into-a-specialisation).
 - Preserve each host's **Invariants** (its wiki page), Zed as `$EDITOR`, and
   deliberate (never unattended) input updates. UI scale comes from the
   compositor only, never per-app scale flags or variables. Match displays by

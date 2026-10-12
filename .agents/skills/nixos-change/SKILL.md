@@ -34,6 +34,7 @@ authorization for that exact step.**
 cd ~/Repos/cix
 git status --short
 hostname                                                      # the host being changed, unless the user names another
+readlink -f /run/current-system                               # a specialisation tag (draba: display-5090) = booted into it, see Step 2
 nix eval --raw .#nixosConfigurations --apply 'c: toString (builtins.attrNames c)'
 ```
 
@@ -67,6 +68,11 @@ run0 /run/current-system/sw/bin/nixos-rebuild test         --store-path <out> --
 run0 /run/current-system/sw/bin/nixos-rebuild switch       --store-path <out> --no-reexec
 ```
 
+- **Booted into a specialisation** (`readlink -f /run/current-system` names
+  one): never activate the base `<out>`. It flips the display GPU under the
+  running session. Activate `<out>/specialisation/<name>/bin/switch-to-configuration test`
+  instead, and make the base the boot default separately with
+  `<out>/bin/switch-to-configuration boot` (`wiki/deployment.md`).
 - `run0` prompts through polkit on the desktop; use `sudo` on a TTY.
 - Changes to the login manager restart it and end the session: apply from
   TTY2 after saving work.
@@ -127,6 +133,8 @@ Commit `flake.lock` alone: `chore(flake): update <inputs>`.
 ## Forbidden
 
 - Running `test`, `switch`, `boot`, a reboot or remote deploys without authorization for that step.
+- Activating the base closure while booted into a specialisation, or any
+  `test`/`switch` without first running `dry-activate` and reading the units it touches.
 - Calling something "applied" after a build, or "persistent" after `test`.
 - Deleting generations or running GC outside the timer without a request.
 - Unattended input updates; bumping `stateVersion`.
