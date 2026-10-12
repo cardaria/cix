@@ -28,3 +28,7 @@ eval "$(zoxide init zsh --cmd cd)"
 
 # --- fastfetch ---
 alias ff='fastfetch'
+
+# --- AI CLIs ---
+alias cc='claude'
+alias cx='codex'
