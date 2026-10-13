@@ -76,7 +76,7 @@ current=$(readlink -f /run/current-system)
 
 if [[ $current == *display-5090* ]]; then
   # The base closure would swap the display GPU under the running session
-  target=$out/specialisation/display-5090
+  target=$(readlink -f "$out/specialisation/display-5090")
   activate() { sudo "$target/bin/switch-to-configuration" "$1"; }
   persist() {
     sudo nix-env -p /nix/var/nix/profiles/system --set "$out"
@@ -86,6 +86,16 @@ else
   target=$out
   activate() { sudo nixos-rebuild "$1" --store-path "$out" --no-reexec; }
   persist() { sudo nixos-rebuild switch --store-path "$out" --no-reexec; }
+fi
+
+live=false
+kept=false
+[[ $current == "$target" ]] && live=true
+[[ $(readlink -f /nix/var/nix/profiles/system) == "$out" ]] && kept=true
+if $live && $kept; then
+  step "Already applied"
+  echo "Running and boot default: ${out##*-}"
+  exit 0
 fi
 
 step "Changes"
@@ -104,20 +114,25 @@ if $dry; then
   exit 0
 fi
 
-echo
-confirm "Apply now?" || {
-  echo "Nothing applied; flake.lock stays updated"
-  exit 0
-}
-quiet activate test
-failed=$(systemctl --failed --no-legend)
-if [[ -n $failed ]]; then
-  echo "Failed units:"
-  echo "$failed"
-else
-  echo "Applied, no failed units"
+if ! $live; then
+  echo
+  confirm "Apply now?" || {
+    echo "Nothing applied; flake.lock stays updated"
+    exit 0
+  }
+  quiet activate test
+  failed=$(systemctl --failed --no-legend)
+  if [[ -n $failed ]]; then
+    echo "Failed units:"
+    echo "$failed"
+  else
+    echo "Applied, no failed units"
+  fi
 fi
 
+if $live; then
+  echo
+fi
 confirm "Keep after reboot?" || {
   echo "Live only; a reboot returns to the old build"
   exit 0
