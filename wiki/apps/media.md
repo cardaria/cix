@@ -1,8 +1,8 @@
 ---
 title: Media and documents
 category: apps
-tags: [haruna, merkuro, okular, gwenview, elisa, plex, spotify, spicetify, mimeapps, signal, teamspeak, vesktop, fluxer, obsidian]
-updated: 2026-10-10
+tags: [haruna, merkuro, okular, gwenview, elisa, plex, spotify, spicetify, mimeapps, signal, teamspeak, vesktop, fluxer, obsidian, steam]
+updated: 2026-10-13
 ---
 
 # Media and documents
@@ -46,6 +46,7 @@ repo first.
 | **TeamSpeak 6** | `apps/teamspeak.nix` | `hotkey_helper` (global hotkeys) loads libX11/libXi at runtime; the override adds them to its runpath, without which it crashes at start. It reads keys through Xwayland, so global hotkeys may only fire while an X11 window has focus |
 | **Vesktop** | `apps/vesktop.nix` | package plus autostart: `~/.config/autostart/vesktop.desktop` runs the wrapped `vesktop --start-minimized` at login |
 | **Fluxer Canary** | `apps/fluxer.nix` | local package `pkgs/fluxer-canary/` (upstream AppImage, not in nixpkgs) plus autostart: `~/.config/autostart/app.fluxer.FluxerDesktopCanary.desktop` runs the wrapped `fluxer-canary --autostart` at login |
+| **Steam** | `modules/nixos/desktop.nix` | `programs.steam`: FHS runtime, 32-bit graphics, controller rules (see below) |
 | nvtop, gpu-screen-recorder, wl-clipboard | `apps/default.nix` | package-only |
 
 ## Notes per app
@@ -102,6 +103,13 @@ toggle alone. On start the app registers itself for `fluxer:` links with
 `mimeapps.list` link; the repo's list names it so that never runs.
 Home Manager writes `~/.config/fluxer-canary-flags.conf` with the same
 VA-API features as Brave, so video decodes on the GPU.
+
+**Steam:** the nixpkgs package is only the bootstrap. The client updates
+itself into `~/.local/share/Steam`, and the games live there too, outside Git.
+Remote Play and LAN transfer ports stay closed. Games render on the 5060,
+because the [GPU access policy](../architecture/gpu-access.md) denies desktop
+processes the 5090. To play on the 5090, boot the `display-5090` entry
+([draba](../architecture/draba.md)).
 
 **Plex:** to change the icon, replace `dotfiles/plex/assets/plex.png` (keep
 the credit in its README) and rebuild. Assets are copied into the store.

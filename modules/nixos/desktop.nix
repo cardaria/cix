@@ -25,6 +25,9 @@
   # Unused screen reader; speechd stays, or Electron's TTS autospawns it and Chromium aborts
   services.orca.enable = false;
 
+  # Brings the FHS runtime, 32-bit graphics and controller udev rules
+  programs.steam.enable = true;
+
   hardware.bluetooth.enable = true;
   services.upower.enable = true;
   services.power-profiles-daemon.enable = true;

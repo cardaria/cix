@@ -51,7 +51,7 @@ configured.
 | --- | --- |
 | [Terminal](apps/terminal.md) | Ghostty defaults, Konsole, Berkeley Mono, fastfetch |
 | [Browsers](apps/browsers.md) | Brave Origin (override, VA-API, frame workaround), Firefox |
-| [Media & documents](apps/media.md) | KDE viewers, Merkuro Calendar, Haruna, Plex, Spotify, Vesktop, Fluxer, default apps |
+| [Media & documents](apps/media.md) | KDE viewers, Merkuro Calendar, Haruna, Plex, Spotify, Vesktop, Fluxer, Steam, default apps |
 
 ## dev/
 
