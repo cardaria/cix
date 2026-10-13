@@ -3,6 +3,8 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    # Separate pin: the CUDA packages recompile locally on every bump
+    nixpkgs-cuda.url = "github:NixOS/nixpkgs/nixos-unstable";
     disko.url = "github:nix-community/disko";
     disko.inputs.nixpkgs.follows = "nixpkgs";
     home-manager.url = "github:nix-community/home-manager";
@@ -34,12 +36,19 @@
     let
       system = "x86_64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
+      cudaPkgs = import inputs.nixpkgs-cuda {
+        inherit system;
+        config.allowUnfree = true;
+      };
       formatter = pkgs.nixfmt-tree;
     in
     {
       nixosConfigurations.draba = nixpkgs.lib.nixosSystem {
         inherit system;
-        specialArgs.chandraSrc = inputs.chandra-src;
+        specialArgs = {
+          chandraSrc = inputs.chandra-src;
+          inherit cudaPkgs;
+        };
         modules = [
           disko.nixosModules.disko
           home-manager.nixosModules.home-manager
@@ -63,6 +72,7 @@
       packages.${system} =
         import ./pkgs {
           pkgs = self.nixosConfigurations.draba.pkgs;
+          inherit cudaPkgs;
           chandraSrc = inputs.chandra-src;
         }
         // {

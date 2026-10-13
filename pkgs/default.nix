@@ -1,8 +1,12 @@
-{ pkgs, chandraSrc }:
 {
-  chandra-ocr = pkgs.callPackage ./chandra-ocr { inherit chandraSrc; };
+  pkgs,
+  cudaPkgs,
+  chandraSrc,
+}:
+{
+  chandra-ocr = cudaPkgs.callPackage ./chandra-ocr { inherit chandraSrc; };
   fluxer-canary = pkgs.callPackage ./fluxer-canary { };
   krohnkite = pkgs.callPackage ./krohnkite { };
-  ninfer = pkgs.callPackage ./ninfer { };
+  ninfer = cudaPkgs.callPackage ./ninfer { };
   nvidia-vaapi-driver = pkgs.callPackage ./nvidia-vaapi-driver { };
 }

@@ -2,7 +2,7 @@
 title: Flake
 category: architecture
 tags: [flake, inputs, checks, devshell, updates]
-updated: 2026-10-10
+updated: 2026-10-13
 ---
 
 # Flake
@@ -15,6 +15,7 @@ host and exposes helper packages, a formatter, a dev shell and checks.
 | Input | Purpose | Follows nixpkgs |
 | --- | --- | --- |
 | `nixpkgs` | `nixos-unstable` | n/a |
+| `nixpkgs-cuda` | second `nixos-unstable` pin, used only by the CUDA packages `chandra-ocr` and `ninfer` | n/a |
 | `home-manager` | user environment, integrated as a NixOS module | yes |
 | `disko` | declarative partitioning (install/recovery only) | yes |
 | `agenix` | encrypted secrets | yes |
@@ -25,12 +26,16 @@ host and exposes helper packages, a formatter, a dev shell and checks.
 Exact revisions are pinned in `flake.lock`. Updates are deliberate, never
 automatic ([Deployment → Updating](../deployment.md#update-packages)).
 
+`nixpkgs-cuda` exists because the local CUDA packages carry sm_120 overrides that no binary
+cache holds, so each bump recompiles them locally. `cix update` leaves it
+alone; `cix update --cuda` moves it together with `nixpkgs`.
+
 ## Outputs
 
 | Output | What |
 | --- | --- |
 | `nixosConfigurations.<host>` | one per host: the whole system, including Home Manager |
-| `packages.x86_64-linux.<name>` | every package in `pkgs/default.nix`, built with the unfree-enabled nixpkgs of a host |
+| `packages.x86_64-linux.<name>` | every package in `pkgs/default.nix`; the CUDA ones use `nixpkgs-cuda`, the rest the nixpkgs of a host |
 | `packages.x86_64-linux.{disko,agenix,age}` | locked recovery tools for `nix run .#<name>` |
 | `formatter` | `nixfmt-tree` → `nix fmt` |
 | `devShells.default` | `nixd`, `nixfmt`, `nixfmt-tree`, `nurl`, `nix-update`, `yq` |

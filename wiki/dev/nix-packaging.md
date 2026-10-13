@@ -2,7 +2,7 @@
 title: Nix packaging
 category: dev
 tags: [packaging, override, overrideAttrs, symlinkJoin, patches, ninfer, chandra, cuda, fluxer, appimage]
-updated: 2026-10-10
+updated: 2026-10-13
 ---
 
 # Nix packaging
@@ -45,10 +45,10 @@ Each package is a flake output and builds on its own:
 nix build .#ninfer -L --no-link --print-out-paths
 ```
 
-Flake outputs use the host's nixpkgs instance, which allows unfree packages,
-so CUDA packages such as NInfer evaluate there too. Modules take them as
+Flake outputs use the host's nixpkgs instance, except the CUDA packages (NInfer, Chandra OCR),
+which use the separate `nixpkgs-cuda` pin with unfree enabled. Modules take them as
 `cixPkgs.<name>`: `modules/nixos/packages.nix` builds `pkgs/default.nix` once
-with the system's nixpkgs and passes it to NixOS and Home Manager modules, so
+with both nixpkgs instances and passes it to NixOS and Home Manager modules, so
 there is one definition per package and no relative imports.
 
 Helpful tools: `nix develop` provides `nurl` and `nix-update`; `nix-init` via `nix shell nixpkgs#nix-init`.
