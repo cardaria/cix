@@ -2,7 +2,7 @@
 title: Deployment
 category: overview
 tags: [rebuild, workflow, updates, git, nixos-rebuild]
-updated: 2026-10-10
+updated: 2026-10-13
 ---
 
 # Deployment
@@ -41,6 +41,12 @@ Live dotfiles skip most of it.
 - Small permanent assets go in `dotfiles/<app>/assets/` with a credit (e.g. Plex's icon).
 
 ## Build and apply
+
+> [!WARNING]
+> Run `readlink -f /run/current-system` first. If it contains `display-5090`, you are
+> booted into the specialisation: **do not run `test`/`switch` with `$cix_candidate`
+> below**. That freezes the machine. Use
+> [Booted into a specialisation](#booted-into-a-specialisation) instead.
 
 ```sh
 cd ~/Repos/cix

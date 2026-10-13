@@ -107,6 +107,10 @@ cix/
 
 ## Usage
 
+> [!WARNING]
+> Booted into the `display-5090` entry (`readlink -f /run/current-system`)? Don't run the
+> switch below. See [Deployment](wiki/deployment.md#booted-into-a-specialisation).
+
 ```sh
 # Check
 nix flake check
