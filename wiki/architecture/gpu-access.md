@@ -2,7 +2,7 @@
 title: GPU access
 category: architecture
 tags: [gpu, nvidia, cuda, permissions, compute]
-updated: 2026-10-13
+updated: 2026-10-14
 ---
 
 # GPU access
@@ -56,13 +56,14 @@ environment overrides for these grants.
 
 ## Monitoring
 
-System Monitor and normal `nvidia-smi` retain statistics for both cards.
-The host uses NixOS `security.wrappers` to give only the fixed NVIDIA
-`nvidia-smi` executable the effective `cix-compute` group. It keeps the
-caller's user identity; it does not run as root or give the calling
-desktop process compute access. Root-only management operations remain
-restricted. Invoking the NVIDIA store binary directly, or any ordinary
-CUDA client, does not receive this group.
+System Monitor, `nvidia-smi` and nvtop retain statistics for both cards.
+The host uses NixOS `security.wrappers` to give only two fixed monitoring
+executables, NVIDIA's `nvidia-smi` and nvtop, the effective `cix-compute`
+group. nvtop needs its own wrapper because it reads NVML in its own process
+instead of calling `nvidia-smi`. Each keeps the caller's user identity; it
+does not run as root or give the calling desktop process compute access.
+Root-only management operations remain restricted. Invoking either store
+binary directly, or any ordinary CUDA client, does not receive this group.
 
 KDE's statistics daemon finds this executable through the standard wrapper
 path. Its [query implementation](https://github.com/KDE/ksystemstats/blob/v6.7.5/plugins/gpu/NvidiaSmiProcess.cpp)
@@ -129,6 +130,7 @@ available through the fixed monitoring executable.
 | LLM/OCR reports a sudo permission error | switch to the generation containing the matching store executable and sudo rule |
 | A new CUDA app cannot open the 5090 | register an explicit compute entry point; leave the desktop group membership unchanged |
 | GPU metrics are unavailable in the desktop | check `command -v nvidia-smi` resolves to `/run/wrappers/bin/nvidia-smi`, then restart `plasma-ksystemstats.service`; do not restore general device access |
+| nvtop lists only the 5060 | `command -v nvtop` must resolve to `/run/wrappers/bin/nvtop`; the store binary has no access to the 5090 |
 
 ## Related
 

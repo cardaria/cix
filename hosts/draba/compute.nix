@@ -62,9 +62,16 @@ in
     {
       users.groups.cix-compute = { };
 
-      # Only the fixed NVIDIA monitoring binary receives the GPU group, never root
+      # Only fixed monitoring binaries receive the GPU group, never root
       security.wrappers.nvidia-smi = {
         source = "${lib.getBin config.hardware.nvidia.package}/bin/nvidia-smi";
+        owner = "root";
+        group = "cix-compute";
+        setgid = true;
+      };
+      # Reads NVML in-process; without the group it lists only the 5060
+      security.wrappers.nvtop = {
+        source = "${pkgs.nvtopPackages.full}/bin/nvtop";
         owner = "root";
         group = "cix-compute";
         setgid = true;
