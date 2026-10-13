@@ -31,6 +31,26 @@ for arg in "$@"; do
   esac
 done
 
+step() {
+  if [[ -t 1 ]]; then
+    printf '\n\033[1m%s\033[0m\n' "$*"
+  else
+    printf '\n%s\n' "$*"
+  fi
+}
+
+# Runs a command silently and shows its output only when it fails
+quiet() {
+  local log status=0
+  log=$(mktemp)
+  "$@" > "$log" 2>&1 || status=$?
+  if ((status)); then
+    cat "$log" >&2
+  fi
+  rm -f "$log"
+  return "$status"
+}
+
 confirm() {
   local reply
   read -r -n1 -p "$1 [y/N] " reply
@@ -39,39 +59,69 @@ confirm() {
 }
 
 cd "$REPO"
-nix flake update "${inputs[@]}"
-git diff --stat -- flake.lock
+
+step "Inputs"
+before=$(cksum < flake.lock)
+quiet nix flake update "${inputs[@]}"
+if [[ $(cksum < flake.lock) == "$before" ]]; then
+  echo "Already up to date"
+else
+  git diff --stat -- flake.lock
+fi
+
+step "Build"
 out=$(nix build ".#nixosConfigurations.$(hostname).config.system.build.toplevel" \
-  --no-link --print-out-paths --no-write-lock-file)
+  --no-link --print-out-paths --no-write-lock-file --option warn-dirty false)
 current=$(readlink -f /run/current-system)
-nix store diff-closures "$current" "$out"
 
 if [[ $current == *display-5090* ]]; then
   # The base closure would swap the display GPU under the running session
-  activate() { sudo "$out/specialisation/display-5090/bin/switch-to-configuration" "$1"; }
+  target=$out/specialisation/display-5090
+  activate() { sudo "$target/bin/switch-to-configuration" "$1"; }
   persist() {
     sudo nix-env -p /nix/var/nix/profiles/system --set "$out"
     sudo "$out/bin/switch-to-configuration" boot
   }
 else
+  target=$out
   activate() { sudo nixos-rebuild "$1" --store-path "$out" --no-reexec; }
   persist() { sudo nixos-rebuild switch --store-path "$out" --no-reexec; }
 fi
 
-activate dry-activate
+step "Changes"
+changes=$(nix store diff-closures "$current" "$target" | grep -E ' → ' | grep -vE '^nixos-system|∅ → ε' || true)
+echo "${changes:-No package changes}"
+
+step "Service restarts"
+if ! raw=$(activate dry-activate 2>&1); then
+  echo "$raw" >&2
+  exit 1
+fi
+restarts=$(grep -vE '^(Not checking switch inhibitors|would activate the configuration)' <<< "$raw" || true)
+echo "${restarts:-None}"
+
 if $dry; then
   exit 0
 fi
 
+echo
 confirm "Apply now?" || {
   echo "Nothing applied; flake.lock stays updated"
   exit 0
 }
-activate test
-systemctl --failed
+quiet activate test
+failed=$(systemctl --failed --no-legend)
+if [[ -n $failed ]]; then
+  echo "Failed units:"
+  echo "$failed"
+else
+  echo "Applied, no failed units"
+fi
+
 confirm "Keep after reboot?" || {
   echo "Live only; a reboot returns to the old build"
   exit 0
 }
-persist
-readlink -f /nix/var/nix/profiles/system
+quiet persist
+profile=$(readlink -f /nix/var/nix/profiles/system)
+echo "Boot default: ${profile##*-}"
