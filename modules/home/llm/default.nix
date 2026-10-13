@@ -115,6 +115,7 @@ let
     runtimeInputs = with pkgs; [
       coreutils
       curl
+      gawk
       gnugrep
       jq
       systemd
@@ -126,6 +127,7 @@ let
       MODEL_FILE = model.file;
       MODEL_SHA256 = model.sha256;
       MODEL_DIR = model.dir;
+      COMPUTE_GPU = osConfig.cix.computeGpu;
     };
     text = builtins.readFile ./cix-llm;
   };
@@ -140,7 +142,7 @@ let
 in
 {
   cix.commands.llm = {
-    description = "Local LLM: status, unload, logs, fetch, ui";
+    description = "Local LLM: status, unload, logs, tps, fetch, ui";
     package = cixLlm;
   };
   cix.computeEntrypoints.llm = llmWorker;

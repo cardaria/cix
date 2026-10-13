@@ -85,13 +85,14 @@ sets the compute CUDA UUID before starting llama-swap. See
 cix llm             # loaded profile, NInfer queue/KV, 5090 VRAM
 cix llm unload      # free the GPU now (e.g. before ComfyUI or suspend)
 cix llm logs        # follow llama-swap and NInfer output
+cix llm tps         # live decode tok/s, 10 s average, watts and tok/J
 cix llm fetch       # download + sha256-verify the pinned model
 cix llm ui          # llama-swap web UI: running models, logs, captures
 ```
 
-`cix llm status` reads NInfer directly, so checking doesn't reset the idle
-timer. GPU statistics use the same fixed NVIDIA monitoring executable as
-System Monitor. The logs are also in the journal:
+`cix llm status` and `cix llm tps` read NInfer directly, so checking doesn't
+reset the idle timer. GPU statistics use the same fixed NVIDIA monitoring
+executable as System Monitor. The logs are also in the journal:
 
 ```sh
 journalctl --user -u llama-swap -b

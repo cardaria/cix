@@ -20,7 +20,7 @@ cix llm --help
 | Command | Does | Details |
 | --- | --- | --- |
 | `cix update` | update inputs, preview, apply the system | [Deployment](../deployment.md#build-and-apply) |
-| `cix llm` | status, unload, logs, fetch, ui of the local LLM | [Local LLM](local-llm.md) |
+| `cix llm` | status, unload, logs, tps, fetch, ui of the local LLM | [Local LLM](local-llm.md) |
 | `cix ocr` | convert PDFs and images, fetch and verify the model | [Local OCR](local-ocr.md) |
 
 `cix help <command>` is the same as `cix <command> --help`.
