@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<EOF
+Usage: cix update [--cuda] [--dry-run]
+
+Updates the flake inputs, builds, previews the changes, then asks before
+applying. Picks the right activation for the booted entry, display-5090 included.
+
+  -c, --cuda     also bump the CUDA pin (recompiles the CUDA packages)
+  -n, --dry-run  stop after the preview
+  -h, --help     show this help
+EOF
+}
+
+inputs=(nixpkgs home-manager plasma-manager chandra-src chandra-model)
+dry=false
+for arg in "$@"; do
+  case $arg in
+    -c | --cuda) inputs+=(nixpkgs-cuda) ;;
+    -n | --dry-run) dry=true ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    *)
+      usage >&2
+      exit 1
+      ;;
+  esac
+done
+
+confirm() {
+  local reply
+  read -r -n1 -p "$1 [y/N] " reply
+  echo
+  [[ $reply == [yY] ]]
+}
+
+cd "$REPO"
+nix flake update "${inputs[@]}"
+git diff --stat -- flake.lock
+out=$(nix build ".#nixosConfigurations.$(hostname).config.system.build.toplevel" \
+  --no-link --print-out-paths --no-write-lock-file)
+current=$(readlink -f /run/current-system)
+nix store diff-closures "$current" "$out"
+
+if [[ $current == *display-5090* ]]; then
+  # The base closure would swap the display GPU under the running session
+  activate() { sudo "$out/specialisation/display-5090/bin/switch-to-configuration" "$1"; }
+  persist() {
+    sudo nix-env -p /nix/var/nix/profiles/system --set "$out"
+    sudo "$out/bin/switch-to-configuration" boot
+  }
+else
+  activate() { sudo nixos-rebuild "$1" --store-path "$out" --no-reexec; }
+  persist() { sudo nixos-rebuild switch --store-path "$out" --no-reexec; }
+fi
+
+activate dry-activate
+if $dry; then
+  exit 0
+fi
+
+confirm "Apply now?" || {
+  echo "Nothing applied; flake.lock stays updated"
+  exit 0
+}
+activate test
+systemctl --failed
+confirm "Keep after reboot?" || {
+  echo "Live only; a reboot returns to the old build"
+  exit 0
+}
+persist
+readlink -f /nix/var/nix/profiles/system

@@ -4,6 +4,7 @@
     ../../modules/home/shell.nix
     ../../modules/home/development.nix
     ../../modules/home/compute.nix
+    ../../modules/home/cix
     ../../modules/home/ssh.nix
     ../../modules/home/llm
     ../../modules/home/ocr

@@ -95,8 +95,9 @@ cix/
 │   ├── nixos/        shared system modules
 │   └── home/         Home Manager modules
 │       ├── apps/     applications
+│       ├── cix/      the cix command and cix update
 │       ├── llm/      local LLM: NInfer, llama-swap, OpenCode
-│       ├── ocr/      Chandra OCR 2, cix-ocr
+│       ├── ocr/      Chandra OCR 2, cix ocr
 │       └── wayland/  Plasma settings, fonts
 ├── home/cardaria/    user entry point and imports
 ├── dotfiles/         live app configs
@@ -108,12 +109,11 @@ cix/
 ## Usage
 
 ```sh
-cix-update
+cix update
 ```
 
-Updates the inputs, builds, previews and asks before applying. It picks the
-right activation for the booted entry, including `display-5090`
-([Deployment](wiki/deployment.md)).
+Updates the inputs, builds, previews and asks before applying. `cix --help`
+lists the other commands ([cix CLI](wiki/dev/cli.md)).
 
 > [!TIP]
 > Changes under `dotfiles/` apply on the application's reload, without a rebuild.

@@ -2,7 +2,7 @@
 title: Overview
 category: overview
 tags: [overview, stack, quick-start]
-updated: 2026-10-10
+updated: 2026-10-13
 ---
 
 # Overview
@@ -25,7 +25,7 @@ system and user environment together. The hosts are listed in the [README](../RE
 | Terminal / shell | [Ghostty](apps/terminal.md) + [zsh/fzf](desktop/shell.md); Zed is the default editor |
 | Secrets | [agenix](security/secrets.md); the age key is backed up in [1Password](security/1password.md) |
 | Local AI | Qwen3.8-27B on the 5090 via NInfer + llama-swap, used from OpenCode ([Local LLM](dev/local-llm.md)) |
-| OCR | Chandra OCR 2 on the 5090; PDF/image extraction with `cix-ocr` ([Local OCR](dev/local-ocr.md)) |
+| OCR | Chandra OCR 2 on the 5090; PDF/image extraction with `cix ocr` ([Local OCR](dev/local-ocr.md)) |
 
 ## How the repo is organised
 

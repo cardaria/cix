@@ -2,12 +2,12 @@
 title: Local OCR
 category: dev
 tags: [ocr, chandra, cuda, models, pdf]
-updated: 2026-10-10
+updated: 2026-10-13
 ---
 
 # Local OCR
 
-`cix-ocr` converts PDFs and images into Markdown, HTML and layout metadata
+`cix ocr` converts PDFs and images into Markdown, HTML and layout metadata
 with the official Chandra OCR 2 model on the RTX 5090.
 
 ## Layout
@@ -44,15 +44,15 @@ open the 5090. See [GPU access](../architecture/gpu-access.md).
 | Images / HTML | saved; `--no-images` / `--no-html` disables them |
 
 Chandra and Qwen each need GPU memory. Before a large OCR job, use
-`cix-llm unload` and pause clients that might reload Qwen. OCR does not stop
+`cix llm unload` and pause clients that might reload Qwen. OCR does not stop
 an active coding request. Inspect memory with `nvidia-smi`.
 
 ## First install
 
 ```sh
-cix-ocr fetch
-cix-ocr status
-cix-ocr verify
+cix ocr fetch
+cix ocr status
+cix ocr verify
 ```
 
 Fetch uses the Git revision and SHA-256 hashes locked in `chandra-model`.
@@ -67,9 +67,9 @@ fetch command; it does not silently fall back to CPU or a hosted API.
 ## Extract a document
 
 ```sh
-cix-ocr ~/Documents/scan.pdf ~/Documents/ocr-output
-cix-ocr ~/Pictures/page.png ~/Documents/ocr-output
-cix-ocr ~/Documents/scans ~/Documents/ocr-output
+cix ocr ~/Documents/scan.pdf ~/Documents/ocr-output
+cix ocr ~/Pictures/page.png ~/Documents/ocr-output
+cix ocr ~/Documents/scans ~/Documents/ocr-output
 ```
 
 Each file gets its own output subdirectory containing `<name>.md`,
@@ -78,9 +78,9 @@ Each file gets its own output subdirectory containing `<name>.md`,
 ## Select pages or options
 
 ```sh
-cix-ocr ~/Documents/scan.pdf ~/Documents/ocr-output --page-range '1-3,7'
-cix-ocr ~/Documents/scan.pdf ~/Documents/ocr-output --include-headers-footers
-cix-ocr --help
+cix ocr ~/Documents/scan.pdf ~/Documents/ocr-output --page-range '1-3,7'
+cix ocr ~/Documents/scan.pdf ~/Documents/ocr-output --include-headers-footers
+cix ocr --help
 ```
 
 ## Update
@@ -92,7 +92,7 @@ nix flake check
 ```
 
 Build and apply through [Deployment](../deployment.md), then run
-`cix-ocr fetch`. A full `nix flake update` also updates both Chandra inputs;
+`cix ocr fetch`. A full `nix flake update` also updates both Chandra inputs;
 nixpkgs supplies updated Python/CUDA dependencies. Inspect the lock changes
 and repeat a representative image and PDF before committing an update.
 
@@ -100,10 +100,10 @@ and repeat a representative image and PDF before committing an update.
 
 | Symptom | Fix |
 | --- | --- |
-| Model missing or unverified | `cix-ocr fetch`; `cix-ocr verify` checks every hash again |
-| Download/hash error | a download that fails its hash is deleted; run `cix-ocr fetch` again. A repeated mismatch means upstream no longer matches the locked metadata |
-| CUDA out of memory | `cix-llm unload`, pause other GPU clients, use batch size 1 |
-| Runs on the 5060 | `cix-ocr` sets `CUDA_VISIBLE_DEVICES` to the 5090's UUID (`cix.computeGpu`); check it is the 5090's in `nvidia-smi -L` |
+| Model missing or unverified | `cix ocr fetch`; `cix ocr verify` checks every hash again |
+| Download/hash error | a download that fails its hash is deleted; run `cix ocr fetch` again. A repeated mismatch means upstream no longer matches the locked metadata |
+| CUDA out of memory | `cix llm unload`, pause other GPU clients, use batch size 1 |
+| Runs on the 5060 | `cix ocr` sets `CUDA_VISIBLE_DEVICES` to the 5090's UUID (`cix.computeGpu`); check it is the 5090's in `nvidia-smi -L` |
 | CPU fallback expected | CUDA is required; check `nvidia-smi` and the running driver |
 | OCR command appears to wait | another OCR command holds the lock; it releases it on exit |
 | Document processing fails | command exits unsuccessfully; inspect the error and input file |

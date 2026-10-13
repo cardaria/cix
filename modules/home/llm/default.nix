@@ -139,7 +139,10 @@ let
   };
 in
 {
-  home.packages = [ cixLlm ];
+  cix.commands.llm = {
+    description = "Local LLM: status, unload, logs, fetch, ui";
+    package = cixLlm;
+  };
   cix.computeEntrypoints.llm = llmWorker;
 
   systemd.user.services.llama-swap = {

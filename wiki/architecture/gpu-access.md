@@ -2,7 +2,7 @@
 title: GPU access
 category: architecture
 tags: [gpu, nvidia, cuda, permissions, compute]
-updated: 2026-10-12
+updated: 2026-10-13
 ---
 
 # GPU access
@@ -46,8 +46,8 @@ prompt is needed, and the group is not added to the user's login session.
 
 | Workload | Entry point | Use |
 | --- | --- | --- |
-| Local LLM | fixed `cix-llm-worker`, started by the user service | OpenCode or `cix-llm` |
-| OCR | fixed `cix-ocr-worker`, called by the CLI | `cix-ocr` |
+| Local LLM | fixed `cix-llm-worker`, started by the user service | OpenCode or `cix llm` |
+| OCR | fixed `cix-ocr-worker`, called by the CLI | `cix ocr` |
 
 Both workers pin CUDA to the compute UUID and keep the user's model paths
 and file ownership. The LLM worker accepts no arguments; OCR
@@ -68,7 +68,7 @@ KDE's statistics daemon finds this executable through the standard wrapper
 path. Its [query implementation](https://github.com/KDE/ksystemstats/blob/v6.7.5/plugins/gpu/NvidiaSmiProcess.cpp)
 uses `--query` for discovery and `dmon -d 2 -s pucm` for live
 gauges. Restart `plasma-ksystemstats.service` if it started before the
-wrapper existed, so it discovers both cards. `cix-llm status` uses the same
+wrapper existed, so it discovers both cards. `cix llm status` uses the same
 monitoring executable, with no separate privileged query worker.
 
 Polling hardware statistics can wake the card; it does not grant Plex,
@@ -98,7 +98,7 @@ systemctl status cix-compute-gpu-permissions
 id
 grep ModifyDeviceFiles /proc/driver/nvidia/params
 nvidia-smi
-cix-ocr status
+cix ocr status
 systemctl --user status llama-swap
 ```
 

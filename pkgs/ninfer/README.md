@@ -24,7 +24,7 @@ and the whole GCC toolchain (~700 MiB) into the runtime closure.
 `disallowedReferences` fails the build if the path returns.
 
 **Model artifacts** are not packaged. `modules/home/llm/default.nix` pins the
-Hugging Face revision and SHA-256 of the weights, and `cix-llm fetch`
+Hugging Face revision and SHA-256 of the weights, and `cix llm fetch`
 downloads them to `~/AI/llm/models/`.
 
 **Updating:** pick a newer master commit after reading its changelog and open

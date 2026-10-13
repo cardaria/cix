@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   cat <<EOF
-Usage: cix-llm [status|unload|logs|fetch|ui]
+Usage: cix llm [status|unload|logs|fetch|ui]
 
   status   loaded profile, NInfer queue and KV use, 5090 VRAM (default)
   unload   stop the loaded profile now
@@ -33,7 +33,7 @@ status() {
   fi
   /run/wrappers/bin/nvidia-smi \
     --query-gpu=name,memory.used,memory.total --format=csv,noheader
-  [[ -f $MODEL_DIR/$MODEL_FILE ]] || echo "Model missing: run cix-llm fetch" >&2
+  [[ -f $MODEL_DIR/$MODEL_FILE ]] || echo "Model missing: run cix llm fetch" >&2
 }
 
 fetch() {
@@ -50,7 +50,7 @@ fetch() {
   # A bad file would otherwise be resumed on every retry
   if ! printf '%s  %s\n' "$MODEL_SHA256" "$target.part" | sha256sum --check; then
     rm -f "$target.part"
-    echo "Hash mismatch: download removed, run cix-llm fetch again" >&2
+    echo "Hash mismatch: download removed, run cix llm fetch again" >&2
     exit 1
   fi
   mv "$target.part" "$target"

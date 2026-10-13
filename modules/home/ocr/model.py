@@ -64,7 +64,7 @@ def main():
     if command == "status":
         ready = marker.is_file() and marker.read_text().strip() == metadata["sha"]
         print(f'Model: {metadata["id"]}\nRevision: {metadata["sha"]}\nPath: {target}')
-        print("Verified" if ready else "Missing or unverified: run cix-ocr fetch")
+        print("Verified" if ready else "Missing or unverified: run cix ocr fetch")
         return 0 if ready else 1
     if command == "fetch":
         fetch()

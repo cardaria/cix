@@ -118,6 +118,13 @@ apps/media.md:
     - dotfiles/spicetify/
   memory: [vesktop-autostart-wrapped, plex-vaapi-desktop-gpu, pdf-in-brave-no-qt-viewer, speechd-for-electron, spicetify-marketplace-choice]
 
+dev/cli.md:
+  sources:
+    - modules/home/cix/default.nix
+    - modules/home/cix/update
+    - home/cardaria/default.nix
+  memory: []
+
 dev/tools.md:
   sources:
     - modules/home/development.nix

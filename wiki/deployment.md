@@ -43,28 +43,34 @@ Live dotfiles skip most of it.
 ## Build and apply
 
 ```sh
-cix-update
+cix update
 ```
 
-One command for everything: it updates the flake inputs, builds, shows what
+One command for everything: it updates the flake inputs (not the CUDA pin), builds, shows what
 changes, previews which units restart, then asks `Apply now?` (live, a reboot
 undoes it) and `Keep after reboot?`. It checks `readlink -f /run/current-system`
 itself and picks the right activation for the entry you booted, so you never
-choose between the base and `display-5090` paths. It is defined in
-`dotfiles/zsh/.zshrc`; answer `n` at either prompt to stop there. A `n` at the first prompt
-leaves only `flake.lock` changed (`git checkout flake.lock` reverts it).
+choose between the base and `display-5090` paths. Answer `n` at either prompt to
+stop there; `n` at the first one leaves only `flake.lock` changed
+(`git checkout flake.lock` reverts it). See [cix CLI](dev/cli.md) for all commands.
 
-The first build after an input update can take long: unfree CUDA packages are
-not in the binary cache and compile locally.
+| Command | Does |
+| --- | --- |
+| `cix update` | update everything except the CUDA pin, preview, ask before applying |
+| `cix update --cuda` | also bump the CUDA pin (`nixpkgs-cuda`), which recompiles `chandra-ocr` and `ninfer` dependencies locally |
+| `cix update --dry-run` | update and preview only, never prompts to apply |
 
-Check the affected apps and `systemctl --failed` (the function prints it). From
+The CUDA pin keeps the long local CUDA compile out of normal updates. Run
+`cix update --cuda` only when you want a newer CUDA stack.
+
+Check the affected apps and `systemctl --failed` (`cix update` prints it). From
 the desktop, `run0` replaces `sudo` for single commands (KDE's polkit agent shows
 the password prompt). There is no separate `home-manager switch`. Changes to the
 login manager should be applied from TTY2 ([Login](desktop/login.md#workflows)).
 plasma-manager writes Plasma settings at activation; KWin and plasmashell pick
 most of them up at the next login.
 
-### Without cix-update
+### Without cix update
 
 For a config change with no input update, build and preview first. This is safe
 in either entry:
@@ -138,11 +144,12 @@ A rebuild is needed when you change packages, imports or link declarations.
 Start from a clean, committed tree, then:
 
 ```sh
-cix-update
+cix update
 ```
 
 It updates `nixpkgs`, `home-manager`, `plasma-manager`, `chandra-src` and
 `chandra-model` (OCR code and model metadata), then follows the flow above.
+`cix update --cuda` also moves `nixpkgs-cuda`.
 Review the lock afterwards with `git diff -- flake.lock`. Also check:
 
 - **Kernel + NVIDIA** move together. Reboot and test DisplayPort, lock,
@@ -150,7 +157,7 @@ Review the lock afterwards with `git diff -- flake.lock`. Also check:
   7 days of generations (never fewer than 5).
 - **Brave**: check Wayland, window borders and hardware video decoding ([Browsers](apps/browsers.md)).
 - **Plasma**: log out and in; check Krohnkite and the shortcuts ([Plasma](desktop/plasma.md)).
-- Chandra: fetch the locked model with `cix-ocr fetch` after switching,
+- Chandra: fetch the locked model with `cix ocr fetch` after switching,
   then verify a representative image/PDF ([Local OCR](dev/local-ocr.md)).
 - Never bump `system.stateVersion` / `home.stateVersion`.
 
@@ -176,9 +183,9 @@ Commit KWin display-config churn (`dotfiles/kwin/`) separately as `chore(kwin): 
 | --- | --- |
 | "path does not exist" for a new file | `git add` it (Git flakes skip untracked files) |
 | "would be clobbered" during activation | an unmanaged file is in the way. Move it aside |
-| Rebooted after `test` and the change is gone | expected: `test` isn't persistent. Answer `y` to `Keep after reboot?` in `cix-update`, or use `switch` |
+| Rebooted after `test` and the change is gone | expected: `test` isn't persistent. Answer `y` to `Keep after reboot?` in `cix update`, or use `switch` |
 | Rebooted after `boot` and still on the old build | the `nix-env --set` step was skipped. See [Booted into a specialisation](#booted-into-a-specialisation) |
-| `cix-update` build takes very long | unfree CUDA packages compile locally. Wait; it is a one-time cost per version |
+| `cix update` build takes very long | something bumped CUDA (`--cuda`) and its unfree packages compile locally. Wait; it is a one-time cost per version |
 | Dead screen right after `test`/`switch` | you were booted into a specialisation and activated the base. Power-cycle, pick the same GRUB entry, then see [Booted into a specialisation](#booted-into-a-specialisation) |
 | Something broke after `switch` | `sudo nixos-rebuild switch --rollback --no-reexec`, or pick an older entry in GRUB |
 

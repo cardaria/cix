@@ -2,7 +2,7 @@
 title: draba
 category: architecture
 tags: [hardware, gpu, nvidia, disko, btrfs]
-updated: 2026-10-12
+updated: 2026-10-13
 ---
 
 # draba
@@ -49,7 +49,7 @@ Don't change these without the user asking:
 - Both cards use the NVIDIA driver, so the PCI IDs tell them apart. Apps
   draw through the compositor's GPU, the 5060.
 - Approved compute workers pin the 5090 by its
-  UUID (`cix.computeGpu`): the `llama-swap` service and `cix-ocr`. Other CUDA
+  UUID (`cix.computeGpu`): the `llama-swap` service and `cix ocr`. Other CUDA
   programs need an explicit compute entry before using the 5090. Ordinary
   desktop CUDA clients can enumerate only the accessible 5060. CUDA
   ordering and an environment variable do not grant device permissions.

@@ -67,19 +67,12 @@ let
           flock 9
           exec ${lib.getExe pkgs.python3} ${./model.py} "$1"
           ;;
-        help|--help|-h)
-          echo 'Usage: cix-ocr INPUT OUTPUT [Chandra options]'
-          echo '       cix-ocr fetch|verify|status'
-          echo
-          ${lib.getExe chandra} --help
-          exit 0
-          ;;
       esac
       # Concurrent OCR invocations would each load the same weights
       exec 9>"''${XDG_RUNTIME_DIR:?}/cix-ocr.lock"
       flock 9
       if [[ ! -f "$MODEL_CHECKPOINT/.verified" ]]; then
-        echo 'Model missing or unverified: run cix-ocr fetch' >&2
+        echo 'Model missing or unverified: run cix ocr fetch' >&2
         exit 1
       fi
       exec ${lib.getExe chandra} "$@" --method hf
@@ -88,12 +81,23 @@ let
   cixOcr = pkgs.writeShellApplication {
     name = "cix-ocr";
     text = ''
+      case ''${1:-help} in
+        help | --help | -h)
+          echo 'Usage: cix ocr INPUT OUTPUT [Chandra options]'
+          echo '       cix ocr fetch|verify|status'
+          echo
+          exec ${lib.getExe chandra} --help
+          ;;
+      esac
       exec /run/wrappers/bin/sudo --non-interactive --user=${config.home.username} \
         --group=cix-compute ${lib.getExe ocrWorker} "$@"
     '';
   };
 in
 {
-  home.packages = [ cixOcr ];
+  cix.commands.ocr = {
+    description = "Chandra OCR: convert PDFs and images, fetch and verify the model";
+    package = cixOcr;
+  };
   cix.computeEntrypoints.ocr = ocrWorker;
 }

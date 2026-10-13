@@ -2,7 +2,7 @@
 title: Architecture
 category: architecture
 tags: [flake, home-manager, modules, live-dotfiles]
-updated: 2026-10-10
+updated: 2026-10-13
 ---
 
 # Architecture
@@ -45,8 +45,9 @@ system) and `useUserPackages` (user packages land in
 | `modules/home/apps/<app>.nix` | Apps with managed config, overrides or services |
 | `modules/home/wayland/` | Plasma user settings through plasma-manager, Krohnkite, fonts |
 | `modules/home/shell.nix`, `development.nix`, `ssh.nix` | Zsh links; developer tools; SSH client |
-| `modules/home/llm/` | Local LLM: NInfer profiles behind llama-swap, OpenCode, `cix-llm` |
-| `modules/home/ocr/` | Chandra OCR 2, `cix-ocr`, verified weights in `~/AI` |
+| `modules/home/cix/` | The `cix` command: dispatcher and `cix update` |
+| `modules/home/llm/` | Local LLM: NInfer profiles behind llama-swap, OpenCode, `cix llm` |
+| `modules/home/ocr/` | Chandra OCR 2, `cix ocr`, verified weights in `~/AI` |
 | `dotfiles/<app>/` | Native config files, edited live |
 | `pkgs/<name>/` | Hand-written packages with provenance |
 | `secrets/` | agenix ciphertext and public recipients |

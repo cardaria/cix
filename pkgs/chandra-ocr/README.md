@@ -28,7 +28,7 @@ they run outside the build sandbox; import checks still run during the build.
 **Weights:** the `chandra-model` flake input is the Hugging Face Git tree
 with LFS downloading off: only small configs and hash pointers enter the
 Nix store. The module generates a SHA-256 manifest from that immutable tree.
-`cix-ocr fetch` verifies the files and stores them under `~/AI/ocr/models`,
+`cix ocr fetch` verifies the files and stores them under `~/AI/ocr/models`,
 outside Git and the Nix store. The Python code is Apache-2.0; model terms
 are in the downloaded `LICENSE` and upstream's model card.
 
@@ -39,7 +39,7 @@ nix flake update chandra-src chandra-model
 nix build .#chandra-ocr -L --no-link
 ```
 
-Review the lock, rebuild, run `cix-ocr fetch`, and repeat the image/PDF
+Review the lock, rebuild, run `cix ocr fetch`, and repeat the image/PDF
 runtime checks in [Local OCR](../../wiki/dev/local-ocr.md).
 
 **Removal condition:** replace this with nixpkgs' Chandra once it supports

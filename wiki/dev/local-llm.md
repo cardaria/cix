@@ -2,7 +2,7 @@
 title: Local LLM
 category: dev
 tags: [llm, opencode, ninfer, llama-swap, qwen, cuda, rtx-5090]
-updated: 2026-10-10
+updated: 2026-10-13
 ---
 
 # Local LLM
@@ -82,14 +82,14 @@ sets the compute CUDA UUID before starting llama-swap. See
 ## Commands
 
 ```sh
-cix-llm             # loaded profile, NInfer queue/KV, 5090 VRAM
-cix-llm unload      # free the GPU now (e.g. before ComfyUI or suspend)
-cix-llm logs        # follow llama-swap and NInfer output
-cix-llm fetch       # download + sha256-verify the pinned model
-cix-llm ui          # llama-swap web UI: running models, logs, captures
+cix llm             # loaded profile, NInfer queue/KV, 5090 VRAM
+cix llm unload      # free the GPU now (e.g. before ComfyUI or suspend)
+cix llm logs        # follow llama-swap and NInfer output
+cix llm fetch       # download + sha256-verify the pinned model
+cix llm ui          # llama-swap web UI: running models, logs, captures
 ```
 
-`cix-llm status` reads NInfer directly, so checking doesn't reset the idle
+`cix llm status` reads NInfer directly, so checking doesn't reset the idle
 timer. GPU statistics use the same fixed NVIDIA monitoring executable as
 System Monitor. The logs are also in the journal:
 
@@ -104,7 +104,7 @@ systemctl --user status llama-swap
 `llm/models` and `ocr/models`, both created at login.
 It is outside the repo on purpose. Git tracks how each model is used and
 which exact file it is (Hugging Face repo, revision, SHA-256 in the module),
-never the weights. On a fresh install, run `cix-llm fetch` (22 GiB).
+never the weights. On a fresh install, run `cix llm fetch` (22 GiB).
 Chandra uses the sibling OCR folder; its locked model and CLI are documented
 in [Local OCR](local-ocr.md).
 
@@ -124,7 +124,7 @@ curl http://localhost:8080/v1/chat/completions -H 'Content-Type: application/jso
 
 - NInfer: see `pkgs/ninfer/README.md`, then re-check both profiles.
 - Model: change `model` in `modules/home/llm/default.nix` (repo, revision,
-  file, hash), rebuild, run `cix-llm fetch`.
+  file, hash), rebuild, run `cix llm fetch`.
 - A profile: edit its entry in `profiles`. If DFlash2 misbehaves, change
   Fast's `spec` to MTP (`--spec mtp --draft-tokens 3 --lm-head-draft`).
 
@@ -132,17 +132,17 @@ curl http://localhost:8080/v1/chat/completions -H 'Content-Type: application/jso
 
 | Symptom | Fix |
 | --- | --- |
-| Requests fail right away | `cix-llm`: is the model present (`cix-llm fetch`)? `cix-llm logs` shows NInfer's error |
-| `cix-llm fetch` reports a hash mismatch | the bad download is deleted; run it again. A repeated mismatch means the file at the pinned revision differs from `model.sha256` |
-| OpenCode: "upstream command exited prematurely" after about 90 s | the profile can't start. `cix-llm logs` shows why, often "runtime reservation requires … bytes": something else holds 5090 VRAM (`nvidia-smi`) |
+| Requests fail right away | `cix llm`: is the model present (`cix llm fetch`)? `cix llm logs` shows NInfer's error |
+| `cix llm fetch` reports a hash mismatch | the bad download is deleted; run it again. A repeated mismatch means the file at the pinned revision differs from `model.sha256` |
+| OpenCode: "upstream command exited prematurely" after about 90 s | the profile can't start. `cix llm logs` shows why, often "runtime reservation requires … bytes": something else holds 5090 VRAM (`nvidia-smi`) |
 | `cudaErrorLaunchTimeout` | the 5090 is driving a display (watchdog). Keep displays on the 5060 |
 | NInfer starts on the 5060 or loads both cards | check the fixed worker selected by `systemctl --user cat llama-swap`; its CUDA UUID comes from `cix.computeGpu` |
-| First reply is slow | a cold start or a swap waiting for another request to finish; watch `cix-llm logs` |
-| Model stays loaded | something is still requesting: `cix-llm ui` → Activity. Or `cix-llm unload` |
-| Tool calls appear as plain text | `cix-llm logs` for NInfer's tool-call parse warning; try a lower thinking variant |
+| First reply is slow | a cold start or a swap waiting for another request to finish; watch `cix llm logs` |
+| Model stays loaded | something is still requesting: `cix llm ui` → Activity. Or `cix llm unload` |
+| Tool calls appear as plain text | `cix llm logs` for NInfer's tool-call parse warning; try a lower thinking variant |
 | HTTP 400 "Unexpected reasoning effort" | a client sent an effort the template lacks (`high`, `max`). Use `none`, `low`, `medium` or `xhigh` |
 | Host RAM: ~9.5 GiB pinned while loaded | NInfer's host prefix cache; it is freed with the model |
-| Slow suspend | VRAM is saved to `/var/tmp`. `cix-llm unload` first |
+| Slow suspend | VRAM is saved to `/var/tmp`. `cix llm unload` first |
 
 ## Related
 
