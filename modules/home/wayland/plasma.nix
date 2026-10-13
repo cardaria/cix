@@ -7,25 +7,6 @@
 }:
 let
   wallpaper = "${config.home.homeDirectory}/Pictures/Wallpapers/art-institute-of-chicago-ytS2Y6cI9sY-unsplash.jpg";
-
-  panelHeight = 30;
-  panelFloating = true;
-
-  # normalpanel, autohide, dodgewindows or windowsgobelow
-  panelHiding = "windowsgobelow";
-
-  # Logical px; 8 is the floating panel's own margin
-  gap = 8;
-
-  # Reserved strip by mode (measured): normalpanel = bar height, windowsgobelow = none.
-  # autohide and dodgewindows overlay windows and reserve nothing
-  topGap =
-    if panelHiding == "windowsgobelow" then
-      panelHeight + (if panelFloating then 2 * gap else gap)
-    else if panelHiding == "normalpanel" && panelFloating then
-      2 * gap
-    else
-      gap;
 in
 {
   home.packages = [ cixPkgs.krohnkite ];
@@ -117,22 +98,23 @@ in
         soleWindowWidth = 60;
         soleWindowHeight = 100;
 
-        screenGapLeft = gap;
-        screenGapRight = gap;
-        screenGapTop = topGap;
-        screenGapBottom = gap;
-        screenGapBetween = gap;
+        # Logical px: 12 physical at 150%
+        screenGapLeft = 8;
+        screenGapRight = 8;
+        screenGapTop = 8;
+        screenGapBottom = 8;
+        screenGapBetween = 8;
       };
     };
 
     panels = [
       {
         location = "top";
-        height = panelHeight;
+        height = 30;
         alignment = "center";
         lengthMode = "fill";
-        hiding = panelHiding;
-        floating = panelFloating;
+        hiding = "normalpanel";
+        floating = false;
         opacity = "adaptive";
         widgets = [
           "org.kde.plasma.kickoff"
@@ -261,7 +243,10 @@ in
         KrohnkiteShrinkWidth = "Meta+-";
         KrohnkitegrowWidth = "Meta+=";
         KrohnkiteToggleFloat = "Meta+Space";
-        KrohnkiteNextLayout = "Meta+M";
+        KrohnkiteNextLayout = [
+          "Meta+M"
+          "Meta+Alt+Space"
+        ];
         KrohnkitePreviousLayout = "Meta+Shift+M";
 
         # Plasma defaults on keys bound above or kept by Krohnkite

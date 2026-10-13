@@ -2,7 +2,7 @@
 title: Preferences
 category: desktop
 tags: [plasma, kde, preferences, appearance, input, panel]
-updated: 2026-10-11
+updated: 2026-10-13
 ---
 
 # Preferences
@@ -74,9 +74,8 @@ switches the desktop together; there is no custom scroll script.
 
 ## Panel
 
-One top panel spans the screen, with a height of 30 logical px, floating style,
-adaptive opacity and Windows Go Below hiding. Plasma un-floats an always-visible
-panel whenever a window touches it; this mode never does.
+One top panel spans the screen, with a height of 30 logical px, flush with the
+top edge (not floating), adaptive opacity and always visible.
 
 The widget order is launcher, 20 px spacer, pager, 20 px spacer, icon-only
 task manager, 20 px spacer, margins separator, system tray, clock and
