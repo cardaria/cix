@@ -71,7 +71,8 @@ run0 /run/current-system/sw/bin/nixos-rebuild switch       --store-path <out> --
 - **Booted into a specialisation** (`readlink -f /run/current-system` names
   one): never activate the base `<out>`. It flips the display GPU under the
   running session. Activate `<out>/specialisation/<name>/bin/switch-to-configuration test`
-  instead, and make the base the boot default separately with
+  instead, and make the base the boot default separately: first
+  `nix-env -p /nix/var/nix/profiles/system --set <out>` (root), then
   `<out>/bin/switch-to-configuration boot` (`wiki/deployment.md`).
 - `run0` prompts through polkit on the desktop; use `sudo` on a TTY.
 - Changes to the login manager restart it and end the session: apply from

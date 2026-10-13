@@ -107,21 +107,13 @@ cix/
 
 ## Usage
 
-> [!WARNING]
-> Booted into the `display-5090` entry (`readlink -f /run/current-system`)? Don't run the
-> switch below. See [Deployment](wiki/deployment.md#booted-into-a-specialisation).
-
 ```sh
-# Check
-nix flake check
-
-# Build
-out=$(nix build ".#nixosConfigurations.$(hostname).config.system.build.toplevel" \
-  --no-link --print-out-paths)
-
-# Switch
-sudo nixos-rebuild switch --store-path "$out" --no-reexec
+cix-update
 ```
+
+Updates the inputs, builds, previews and asks before applying. It picks the
+right activation for the booted entry, including `display-5090`
+([Deployment](wiki/deployment.md)).
 
 > [!TIP]
 > Changes under `dotfiles/` apply on the application's reload, without a rebuild.

@@ -42,23 +42,53 @@ Live dotfiles skip most of it.
 
 ## Build and apply
 
-> [!WARNING]
-> Run `readlink -f /run/current-system` first. If it contains `display-5090`, you are
-> booted into the specialisation: **do not run `test`/`switch` with `$cix_candidate`
-> below**. That freezes the machine. Use
-> [Booted into a specialisation](#booted-into-a-specialisation) instead.
+```sh
+cix-update
+```
+
+One command for everything: it updates the flake inputs, builds, shows what
+changes, previews which units restart, then asks `Apply now?` (live, a reboot
+undoes it) and `Keep after reboot?`. It checks `readlink -f /run/current-system`
+itself and picks the right activation for the entry you booted, so you never
+choose between the base and `display-5090` paths. It is defined in
+`dotfiles/zsh/.zshrc`; answer `n` at either prompt to stop there. A `n` at the first prompt
+leaves only `flake.lock` changed (`git checkout flake.lock` reverts it).
+
+The first build after an input update can take long: unfree CUDA packages are
+not in the binary cache and compile locally.
+
+Check the affected apps and `systemctl --failed` (the function prints it). From
+the desktop, `run0` replaces `sudo` for single commands (KDE's polkit agent shows
+the password prompt). There is no separate `home-manager switch`. Changes to the
+login manager should be applied from TTY2 ([Login](desktop/login.md#workflows)).
+plasma-manager writes Plasma settings at activation; KWin and plasmashell pick
+most of them up at the next login.
+
+### Without cix-update
+
+For a config change with no input update, build and preview first. This is safe
+in either entry:
 
 ```sh
 cd ~/Repos/cix
 nix fmt
 nix flake check
-cix_candidate=$(nix build ".#nixosConfigurations.$(hostname).config.system.build.toplevel" \
-  --no-link --print-out-paths --no-write-lock-file)
+cix_candidate=$(nix build ".#nixosConfigurations.$(hostname).config.system.build.toplevel" --no-link --print-out-paths --no-write-lock-file)
 cix_before=$(readlink -f /run/current-system)
-nix store diff-closures "$cix_before" "$cix_candidate"     # what changes
-sudo nixos-rebuild dry-activate --store-path "$cix_candidate" --no-reexec
-sudo nixos-rebuild test         --store-path "$cix_candidate" --no-reexec
+nix store diff-closures "$cix_before" "$cix_candidate"
 ```
+
+Then check the entry you booted with `readlink -f /run/current-system`.
+
+**Base entry:**
+
+```sh
+sudo nixos-rebuild dry-activate --store-path "$cix_candidate" --no-reexec
+sudo nixos-rebuild test --store-path "$cix_candidate" --no-reexec
+sudo nixos-rebuild switch --store-path "$cix_candidate" --no-reexec
+```
+
+Undo a `test` with `sudo nixos-rebuild test --store-path "$cix_before" --no-reexec`.
 
 | Step | Meaning |
 | --- | --- |
@@ -67,35 +97,28 @@ sudo nixos-rebuild test         --store-path "$cix_candidate" --no-reexec
 | `test` | activates now, but a reboot returns to the previous generation |
 | `switch` | activates and makes it the boot default (updates GRUB) |
 
-Check the affected apps and `systemctl --failed`. Then either make it persistent or undo:
-
-```sh
-sudo nixos-rebuild switch --store-path "$cix_candidate" --no-reexec   # keep
-sudo nixos-rebuild test   --store-path "$cix_before"    --no-reexec   # undo
-```
-
-From the desktop you can use `run0 /run/current-system/sw/bin/nixos-rebuild …`
-(KDE's polkit agent shows the password prompt). On a plain TTY use `sudo`. There is no
-separate `home-manager switch`. Changes to the login manager should be applied from
-TTY2 ([Login](desktop/login.md#workflows)). plasma-manager writes Plasma
-settings at activation; KWin and plasmashell pick most of them up at the
-next login.
-
 ### Booted into a specialisation
 
-`readlink -f /run/current-system` names the entry you booted (on draba the path
-contains `display-5090`). Never activate the base closure from there: it
-switches the display GPU, stops the login manager and locks the card behind
-your screen, which leaves a dead screen. Activate the specialisation's own
-closure instead:
+If the path contains `display-5090`, never activate the base closure: it switches
+the display GPU, stops the login manager and locks the card behind your screen,
+which leaves a dead screen. Never run `test` or `switch` with `$cix_candidate`.
+Activate the specialisation's own closure instead:
 
 ```sh
-sudo "$cix_candidate/specialisation/display-5090/bin/switch-to-configuration" test   # running session only
-sudo "$cix_candidate/bin/switch-to-configuration" boot                               # base stays the GRUB default
+sudo "$cix_candidate/specialisation/display-5090/bin/switch-to-configuration" dry-activate
+sudo "$cix_candidate/specialisation/display-5090/bin/switch-to-configuration" test
+sudo nix-env -p /nix/var/nix/profiles/system --set "$cix_candidate"
+sudo "$cix_candidate/bin/switch-to-configuration" boot
+readlink -f /nix/var/nix/profiles/system
 ```
 
-Run `dry-activate` first: if it lists `plasmalogin` or `cix-desktop-gpu`, you
-are about to change the display GPU.
+Run `dry-activate` first: `plasmalogin` or `cix-desktop-gpu` among the units it
+would stop or restart means the display GPU would change. A `plasmalogin`
+under "would NOT stop" is only a rebuilt binary that takes effect at the next
+reboot. The last line must end in the new nixpkgs revision. `switch-to-configuration boot`
+alone only rebuilds GRUB from the registered generations, so without the
+`nix-env --set` line the next reboot returns to the previous build. Both GRUB
+entries belong to the same generation, so both pick up the update.
 
 ## Live dotfiles
 
@@ -112,15 +135,15 @@ A rebuild is needed when you change packages, imports or link declarations.
 
 ## Update packages
 
-Start from a clean, committed tree:
+Start from a clean, committed tree, then:
 
 ```sh
-nix flake update nixpkgs home-manager plasma-manager     # or: nix flake update <input>
-nix flake update chandra-src chandra-model  # OCR code and model metadata
-git diff -- flake.lock
+cix-update
 ```
 
-Then build/test/switch as above, and also check:
+It updates `nixpkgs`, `home-manager`, `plasma-manager`, `chandra-src` and
+`chandra-model` (OCR code and model metadata), then follows the flow above.
+Review the lock afterwards with `git diff -- flake.lock`. Also check:
 
 - **Kernel + NVIDIA** move together. Reboot and test DisplayPort, lock,
   and suspend/resume within a week: the weekly cleanup keeps only the last
@@ -138,13 +161,13 @@ Commit the lock on its own: `chore(flake): update nixpkgs and home-manager`.
 ```sh
 git status --short
 git diff
-git add <paths>              # never add -A blindly; never keys or plaintext
+git add <paths>
 git diff --cached --check
 git commit -m "feat(apps): add signal-desktop"
 git push origin main
 ```
 
-Message format: `type(scope): description` (`feat`, `fix`, `refactor`, `chore`, `docs`).
+Never `git add -A` blindly, and never keys or plaintext. Message format: `type(scope): description` (`feat`, `fix`, `refactor`, `chore`, `docs`).
 Commit KWin display-config churn (`dotfiles/kwin/`) separately as `chore(kwin): …`.
 
 ## Troubleshooting
@@ -153,7 +176,9 @@ Commit KWin display-config churn (`dotfiles/kwin/`) separately as `chore(kwin): 
 | --- | --- |
 | "path does not exist" for a new file | `git add` it (Git flakes skip untracked files) |
 | "would be clobbered" during activation | an unmanaged file is in the way. Move it aside |
-| Rebooted after `test` and the change is gone | expected: `test` isn't persistent. Use `switch` |
+| Rebooted after `test` and the change is gone | expected: `test` isn't persistent. Answer `y` to `Keep after reboot?` in `cix-update`, or use `switch` |
+| Rebooted after `boot` and still on the old build | the `nix-env --set` step was skipped. See [Booted into a specialisation](#booted-into-a-specialisation) |
+| `cix-update` build takes very long | unfree CUDA packages compile locally. Wait; it is a one-time cost per version |
 | Dead screen right after `test`/`switch` | you were booted into a specialisation and activated the base. Power-cycle, pick the same GRUB entry, then see [Booted into a specialisation](#booted-into-a-specialisation) |
 | Something broke after `switch` | `sudo nixos-rebuild switch --rollback --no-reexec`, or pick an older entry in GRUB |
 
