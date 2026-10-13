@@ -1,7 +1,7 @@
 ---
 title: Nix packaging
 category: dev
-tags: [packaging, override, overrideAttrs, symlinkJoin, patches, ninfer, chandra, cuda, fluxer, appimage]
+tags: [packaging, override, overrideAttrs, symlinkJoin, patches, ninfer, chandra, cuda, fluxer, appimage, greencurve]
 updated: 2026-10-13
 ---
 
@@ -18,7 +18,7 @@ a full vendored package. Coding agents follow the `nix-packaging` skill.
 | Change build flags / plugins | `pkg.override { … }` | Brave (`commandLineArgs`) |
 | Patch an upstream package | `pkgs/<name>/` + `overrideAttrs` + `patches` | Krohnkite sole-window gaps, NVIDIA VA-API multi-GPU |
 | Different icon / `.desktop` | `symlinkJoin` + `postBuild` | Plex |
-| Not in nixpkgs yet | `pkgs/<name>/` + `callPackage` | NInfer, Chandra OCR, Fluxer Canary |
+| Not in nixpkgs yet | `pkgs/<name>/` + `callPackage` | NInfer, Chandra OCR, Fluxer Canary, Green Curve |
 
 No overlays: none of these changes need to be seen by other packages.
 
@@ -91,6 +91,19 @@ commands, the desktop-entry and icon fixes and the removal condition are in
 
 ```sh
 nix build .#fluxer-canary -L --no-link
+```
+
+## Green Curve
+
+Upstream's official release binary for the x86_64 Linux build, patched with
+`autoPatchelfHook` and `autoAddDriverRunpath` so it loads NVML and NvAPI from
+the running driver. A source build would need upstream's hash-pinned Zig 0.13
+toolchain. The systemd units, launcher and icon come from the same tag.
+Hashes, the update steps and the removal condition are in
+`pkgs/greencurve/README.md`. Usage: [draba](../architecture/draba.md#gpu-tuning-green-curve).
+
+```sh
+nix build .#greencurve -L --no-link
 ```
 
 ## Krohnkite

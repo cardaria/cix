@@ -1,7 +1,7 @@
 ---
 title: draba
 category: architecture
-tags: [hardware, gpu, nvidia, disko, btrfs]
+tags: [hardware, gpu, nvidia, disko, btrfs, undervolt]
 updated: 2026-10-13
 ---
 
@@ -17,6 +17,7 @@ and a dual-boot disk layout.
 | CPU | AMD (`kvm-amd`, microcode updates) | `hosts/draba/hardware.nix` |
 | Display GPU | NVIDIA RTX 5060 LP (8 GiB), open kernel modules with early KMS | `hosts/draba/graphics.nix` |
 | Compute GPU | NVIDIA RTX 5090 (32 GiB), same driver (`branch = "latest"`) | `hosts/draba/graphics.nix` |
+| GPU tuning | Green Curve daemon: VF-curve undervolt, overclock, fans | `hosts/draba/gpu-tuning.nix` |
 | Monitor | 3840×2160 @ 160 Hz, KWin scale 150%, matched by EDID identity | `dotfiles/kwin/draba/kwinoutputconfig.json` |
 | NixOS disk | 4 TB NVMe, Disko-managed | `hosts/draba/storage.nix` |
 | Windows disk | separate NVMe, not managed by this repo | n/a |
@@ -113,6 +114,30 @@ kernel invents a mode for it. On a link without 160 Hz, change the rate in
 - Kernel and driver changes are only proven by a reboot. Switching drivers
   in a running session is not a test.
 
+### GPU tuning (Green Curve)
+
+[Green Curve](https://github.com/aufkrawall/green-curve) edits the
+voltage/frequency curve point by point, like MSI Afterburner on Windows. Use it
+to undervolt and overclock the 5090. `hosts/draba/gpu-tuning.nix` installs
+`pkgs/greencurve/`, enables `greencurve.service` (the root daemon that applies
+settings) and `greencurve-resume.service` (reapplies them after suspend), and
+adds the user to the `greencurve` group.
+
+- Open the TUI with `greencurve` or the *Green Curve* launcher. It talks to the
+  daemon over `/run/greencurve/greencurve.sock`, so it needs no root. Pick the
+  5090 inside the TUI. The daemon sees both cards.
+- The daemon keeps its state in `/var/lib/greencurve`. By default it
+  reapplies the last applied settings at boot; `greencurve --show-startup`
+  prints the startup policy.
+- The group grants clock, voltage, power and fan control of both cards
+  through the daemon. It doesn't grant CUDA access to the 5090
+  ([GPU access](gpu-access.md)).
+- Don't run upstream's `--service-install` or `greencurve-setup.sh`. They
+  write a second unit under `/etc/systemd/system`. Don't run LACT next to it
+  either: both would write the same curve.
+- Test a curve under the real workload. A compute job pushed too far may
+  produce wrong output instead of crashing.
+
 ## Storage (Disko)
 
 | Partition | Size | Content |
@@ -175,6 +200,8 @@ Then `systemctl --failed` should be empty.
 | `cix-desktop-gpu` errors (no login manager) | `lspci -nnk \| grep -A3 VGA`. Is the 5060 bound to `nvidia`? Its PCI IDs changed if the card was replaced |
 | Suspend fails with the GPUs | free space in `/var/tmp` (≥ 42 GiB) |
 | CUDA missing after update | reboot first; then `nvidia-smi` |
+| Green Curve TUI can't reach the daemon | `systemctl status greencurve`; `id` lists `greencurve` (log in again after the first switch) |
+| A bad curve crashes the GPU or the desktop | `greencurve --reset --apply-config`; if it hits at boot, `greencurve --startup-profile none` first |
 
 ## Related
 

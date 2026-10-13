@@ -74,6 +74,14 @@ monitoring executable, with no separate privileged query worker.
 Polling hardware statistics can wake the card; it does not grant Plex,
 KWin or another desktop process permission to allocate GPU workloads.
 
+## Tuning
+
+Green Curve's root daemon (`hosts/draba/gpu-tuning.nix`) opens both cards to
+apply clocks, the voltage curve, power limits and fan settings. Its
+`greencurve` group lets the desktop user drive the daemon over a socket. It
+allocates no CUDA context and gives the user no device access, so the compute
+boundary above is unchanged. See [draba](draba.md#gpu-tuning-green-curve).
+
 ## Adding another compute tool
 
 Register its store executable in `cix.computeEntrypoints` and launch that

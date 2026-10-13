@@ -33,8 +33,11 @@ architecture/draba.md:
     - hosts/draba/graphics.nix
     - hosts/draba/input.nix
     - hosts/draba/compute.nix
+    - hosts/draba/gpu-tuning.nix
     - hosts/draba/desktop-gpu
     - hosts/draba/storage.nix
+    - pkgs/greencurve/default.nix
+    - pkgs/greencurve/README.md
     - pkgs/nvidia-vaapi-driver/default.nix
     - pkgs/nvidia-vaapi-driver/README.md
   memory: [rtx5060-display-rtx5090-compute, rtx5060-pcie-gen3-x2-slot, disks-by-identity, console-mode-early-kms]
@@ -42,6 +45,7 @@ architecture/draba.md:
 architecture/gpu-access.md:
   sources:
     - hosts/draba/compute.nix
+    - hosts/draba/gpu-tuning.nix
     - modules/home/compute.nix
     - modules/home/llm/default.nix
     - modules/home/ocr/default.nix
@@ -139,6 +143,8 @@ dev/nix-packaging.md:
     - pkgs/default.nix
     - pkgs/fluxer-canary/default.nix
     - pkgs/fluxer-canary/README.md
+    - pkgs/greencurve/default.nix
+    - pkgs/greencurve/README.md
     - pkgs/krohnkite/default.nix
     - pkgs/krohnkite/README.md
     - pkgs/krohnkite/sole-window-gaps.patch

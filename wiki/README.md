@@ -33,7 +33,7 @@ configured.
 | --- | --- |
 | [Architecture](architecture/index.md) | How the flake, host, NixOS and Home Manager modules fit together |
 | [Flake](architecture/flake.md) | Inputs, outputs, checks, dev shell, updating the lock |
-| [draba](architecture/draba.md) | The machine: dual GPU, disks, input devices, kernel, hardware quirks |
+| [draba](architecture/draba.md) | The machine: dual GPU, GPU tuning (Green Curve), disks, input devices, kernel, hardware quirks |
 | [GPU access](architecture/gpu-access.md) | 5090 device permissions and explicit LLM/OCR access |
 
 ## desktop/
@@ -61,7 +61,7 @@ configured.
 | [Developer tools](dev/tools.md) | Zed, Micro, Lazygit, nixd/nixfmt, AI CLIs, nvtop |
 | [Local LLM](dev/local-llm.md) | Qwen3.8-27B on the 5090: NInfer, llama-swap, OpenCode profiles, `~/AI` |
 | [Local OCR](dev/local-ocr.md) | Chandra OCR 2 on the 5090: PDFs, images, verified weights in `~/AI` |
-| [Nix packaging](dev/nix-packaging.md) | `pkgs/`, overrides, patches, updating NInfer, Chandra and Fluxer |
+| [Nix packaging](dev/nix-packaging.md) | `pkgs/`, overrides, patches, updating NInfer, Chandra, Fluxer and Green Curve |
 
 ## security/
 
