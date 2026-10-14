@@ -1,7 +1,7 @@
 # Fluxer Canary package provenance
 
-**Source:** the upstream canary AppImage, version `2026.1013.155925`
-(published 2026-10-13), from `pkgs.fluxer.com`. The wrapper follows the
+**Source:** the upstream canary AppImage, version `2026.1014.5142`
+(published 2026-10-14), from `pkgs.fluxer.com`. The wrapper follows the
 open nixpkgs PR [#552820](https://github.com/NixOS/nixpkgs/pull/552820)
 (`fluxer-canary`, head `048a00c1fd9a3d038ad0804b00bff5b6f07bcc0e`). A source
 build is impractical: the client needs the whole monorepo, pnpm, a Cargo

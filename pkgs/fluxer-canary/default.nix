@@ -10,13 +10,13 @@
 }:
 let
   pname = "fluxer-canary";
-  version = "2026.1013.155925";
+  version = "2026.1014.5142";
   desktopId = "app.fluxer.FluxerDesktopCanary";
 
   src = fetchurl {
     name = "${pname}-${version}.AppImage";
     url = "https://pkgs.fluxer.com/desktop/canary/linux/x64/${version}/appimage";
-    hash = "sha256-5H9ZlJfIl/nn18aFC49Gp5cSSVFW4LzkRqlhLbyhF8c=";
+    hash = "sha256-AAPKzDsks2vOIINEG49Z7yZCZ3s1o2abQMffjYVTees=";
   };
 
   appimageContents = appimageTools.extract { inherit pname version src; };
