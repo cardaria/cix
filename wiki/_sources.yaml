@@ -110,8 +110,8 @@ apps/media.md:
     - modules/nixos/desktop.nix
     - modules/home/apps/default.nix
     - modules/home/apps/fluxer.nix
-    - pkgs/fluxer-canary/default.nix
-    - pkgs/fluxer-canary/README.md
+    - pkgs/fluxer/default.nix
+    - pkgs/fluxer/README.md
     - modules/home/apps/obsidian.nix
     - modules/home/apps/plex.nix
     - dotfiles/plex/
@@ -141,8 +141,8 @@ dev/tools.md:
 dev/nix-packaging.md:
   sources:
     - pkgs/default.nix
-    - pkgs/fluxer-canary/default.nix
-    - pkgs/fluxer-canary/README.md
+    - pkgs/fluxer/default.nix
+    - pkgs/fluxer/README.md
     - pkgs/greencurve/default.nix
     - pkgs/greencurve/README.md
     - pkgs/krohnkite/default.nix

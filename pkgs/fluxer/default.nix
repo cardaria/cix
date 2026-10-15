@@ -9,14 +9,14 @@
   speechd-minimal,
 }:
 let
-  pname = "fluxer-canary";
-  version = "2026.1014.5142";
-  desktopId = "app.fluxer.FluxerDesktopCanary";
+  pname = "fluxer";
+  version = "2026.1015.24528";
+  desktopId = "app.fluxer.FluxerDesktop";
 
   src = fetchurl {
     name = "${pname}-${version}.AppImage";
-    url = "https://pkgs.fluxer.com/desktop/canary/linux/x64/${version}/appimage";
-    hash = "sha256-AAPKzDsks2vOIINEG49Z7yZCZ3s1o2abQMffjYVTees=";
+    url = "https://pkgs.fluxer.com/desktop/stable/linux/x64/${version}/appimage";
+    hash = "sha256-DsSsJAY9p73JUbbACulC2zySDtcSjsVzhATORs/VUIs=";
   };
 
   appimageContents = appimageTools.extract { inherit pname version src; };
@@ -43,7 +43,7 @@ appimageTools.wrapType2 {
     install -Dm444 ${appimageContents}/${desktopId}.desktop -t $out/share/applications
     substituteInPlace $out/share/applications/${desktopId}.desktop \
       --replace-fail 'Exec=AppRun' 'Exec=${pname}' \
-      --replace-fail '"/opt/${pname}/${pname}"' '${pname}'
+      --replace-fail '"/opt/Fluxer/${pname}"' '${pname}'
 
     # The AppImage ships only 1024x1024, a size hicolor doesn't index
     for size in 16 22 24 32 48 64 128 256 512; do
@@ -54,9 +54,9 @@ appimageTools.wrapType2 {
   '';
 
   meta = {
-    description = "Free and open source instant messaging and VoIP chat app (canary channel)";
+    description = "Free and open source instant messaging and VoIP chat app";
     homepage = "https://fluxer.app";
-    downloadPage = "https://canary.fluxer.app/download";
+    downloadPage = "https://fluxer.app/download";
     license = lib.licenses.agpl3Plus;
     sourceProvenance = [ lib.sourceTypes.binaryNativeCode ];
     platforms = [ "x86_64-linux" ];

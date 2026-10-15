@@ -2,7 +2,7 @@
 title: Preferences
 category: desktop
 tags: [plasma, kde, preferences, appearance, input, panel]
-updated: 2026-10-13
+updated: 2026-10-15
 ---
 
 # Preferences
@@ -46,7 +46,7 @@ lacks, each pointing at the closest Colloid icon. The launcher button is the exc
 | App | Icon name | Shown as |
 | --- | --- | --- |
 | Brave Origin | `brave-origin` | Brave |
-| Fluxer Canary | `fluxer-canary` | generic chat |
+| Fluxer | `fluxer` | generic chat |
 | Haruna | `haruna` | Haruna |
 | Micro | `micro` | Micro |
 | Merkuro Calendar | `org.kde.merkuro.calendar` | Kalendar |

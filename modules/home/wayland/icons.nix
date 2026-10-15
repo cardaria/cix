@@ -6,7 +6,7 @@ let
   # App icon names Colloid lacks, mapped to the closest Colloid icon
   aliases = {
     brave-origin = "brave-browser";
-    fluxer-canary = "internet-chat";
+    fluxer = "internet-chat";
     haruna = "org.kde.haruna";
     micro = "micro-logo-mark";
     "org.kde.merkuro.calendar" = "org.kde.kalendar";

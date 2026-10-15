@@ -5,7 +5,7 @@
 }:
 {
   chandra-ocr = cudaPkgs.callPackage ./chandra-ocr { inherit chandraSrc; };
-  fluxer-canary = pkgs.callPackage ./fluxer-canary { };
+  fluxer = pkgs.callPackage ./fluxer { };
   greencurve = pkgs.callPackage ./greencurve { };
   krohnkite = pkgs.callPackage ./krohnkite { };
   ninfer = cudaPkgs.callPackage ./ninfer { };
