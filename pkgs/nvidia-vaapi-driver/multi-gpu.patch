@@ -1,0 +1,95 @@
+diff -ruN a/src/direct/direct-export-buf.c b/src/direct/direct-export-buf.c
+--- a/src/direct/direct-export-buf.c
++++ b/src/direct/direct-export-buf.c
+@@ -75,6 +75,18 @@
+         }
+     }
+ 
++    //The UUID query can fail (NVIDIA 615 returns nothing), so match the PCI bus
++    //from the RM gpu_id (bus << 8 | device) instead of silently taking device 0
++    for (int i = 0; i < gpuCount; i++) {
++        int bus = -1;
++        if (!CHECK_CUDA_RESULT(drv->cu->cuDeviceGetAttribute(&bus, CU_DEVICE_ATTRIBUTE_PCI_BUS_ID, i)) &&
++            bus == (int) (drv->driverContext.gpu_id >> 8)) {
++            LOG("Matched CUDA device %d by PCI bus %02x", i, bus);
++            drv->cudaGpuId = i;
++            return;
++        }
++    }
++
+     //default to index 0
+     drv->cudaGpuId = 0;
+ }
+diff -ruN a/src/direct/nv-driver.c b/src/direct/nv-driver.c
+--- a/src/direct/nv-driver.c
++++ b/src/direct/nv-driver.c
+@@ -5,6 +5,7 @@
+ 
+ #define _GNU_SOURCE 1
+ 
++#include <stdio.h>
+ #include <sys/ioctl.h>
+ #include <fcntl.h>
+ #include <unistd.h>
+@@ -369,10 +370,6 @@
+         goto err;
+     }
+ 
+-    nv0Fd = open("/dev/nvidia0", O_RDWR|O_CLOEXEC);
+-    if (nv0Fd == -1) {
+-        goto err;
+-    }
+ 
+     //query the version of the api
+     char *ver = NULL;
+@@ -388,6 +385,32 @@
+ 
+     LOG("Got dev info: %x %x %x %x", context->gpu_id, context->sector_layout, context->page_kind_generation, context->generic_page_kind)
+ 
++    //multi-GPU: /dev/nvidia0 and device instance 0 are only right for the first GPU,
++    //so use the minor of the GPU behind the DRM fd (gpu_id is bus << 8 | device)
++    {
++        int minor = 0;
++        char path[96];
++        snprintf(path, sizeof(path), "/proc/driver/nvidia/gpus/0000:%02x:%02x.0/information",
++                 (context->gpu_id >> 8) & 0xff, context->gpu_id & 0xff);
++        FILE *info = fopen(path, "re");
++        if (info != NULL) {
++            char line[256];
++            while (fgets(line, sizeof(line), info) != NULL) {
++                if (sscanf(line, "Device Minor: %d", &minor) == 1) {
++                    break;
++                }
++            }
++            fclose(info);
++        }
++        char node[32];
++        snprintf(node, sizeof(node), "/dev/nvidia%d", minor);
++        LOG("Using %s for GPU %x", node, context->gpu_id)
++        nv0Fd = open(node, O_RDWR|O_CLOEXEC);
++        if (nv0Fd == -1) {
++            goto err;
++        }
++    }
++
+     //allocate the root object
+     bool ret = nv_alloc_object(nvctlFd, context->driverMajorVersion, NULL_OBJECT, NULL_OBJECT, &context->clientObject, NV01_ROOT_CLIENT, 0, (void*)0);
+     if (!ret) {
+@@ -402,8 +425,17 @@
+         goto err;
+     }
+ 
++    //find the device instance of the GPU behind the DRM fd
++    NV0000_CTRL_GPU_GET_ID_INFO_V2_PARAMS idInfo = { .gpuId = context->gpu_id };
++    if (!nv_rm_control(nvctlFd, context->clientObject, context->clientObject, NV0000_CTRL_CMD_GPU_GET_ID_INFO_V2, 0, sizeof(idInfo), &idInfo)) {
++        LOG("NV0000_CTRL_CMD_GPU_GET_ID_INFO_V2 failed")
++        goto err;
++    }
++    LOG("GPU %x is device instance %u", context->gpu_id, idInfo.deviceInstance)
++
+     //allocate the parent memory object
+     NV0080_ALLOC_PARAMETERS deviceParams = {
++       .deviceId = idInfo.deviceInstance,
+        .hClientShare = context->clientObject
+     };
+ 

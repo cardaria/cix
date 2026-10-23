@@ -1,0 +1,164 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<EOF
+Usage: cix llm [status|unload|logs|tps|fetch|ui]
+
+  status   loaded profile, NInfer queue and KV use, 5090 VRAM (default)
+  unload   stop the loaded profile now
+  logs     follow llama-swap and NInfer logs
+  tps      live tokens per second, 10 s average, GPU watts and tok/J
+  fetch    download and verify the pinned model into $MODEL_DIR
+  ui       print the llama-swap web UI address
+EOF
+}
+
+status() {
+  local running model state proxy metrics name used total loaded=false
+  if ! running=$(curl -fsS "$ENDPOINT/running"); then
+    echo "llama-swap isn't answering: systemctl --user status llama-swap" >&2
+    exit 1
+  fi
+  while read -r model state; do
+    row Profile "$model · $state"
+    loaded=true
+  done < <(jq -r '.running[] | "\(.model) \(.state)"' <<< "$running")
+  $loaded || row Profile "none loaded"
+
+  # Straight to NInfer: a request through llama-swap would reset the idle timer
+  proxy=$(jq -r 'first(.running[] | select(.state == "ready") | .proxy) // empty' <<< "$running")
+  if [[ -n $proxy ]] && metrics=$(curl -fsS "$proxy/metrics"); then
+    awk '
+      $1 == "ninfer_requests_running" { run = $2 }
+      $1 == "ninfer_requests_waiting" { wait = $2 }
+      $1 == "ninfer_device_kv_used_pages" { used = $2 }
+      $1 == "ninfer_device_kv_capacity_pages" { cap = $2 }
+      $1 == "ninfer_max_context_tokens" { ctx = $2 }
+      END {
+        printf "%-9s %d running · %d waiting\n", "Queue", run, wait
+        if (cap > 0) printf "%-9s %d of %d pages · %.0f%%\n", "KV cache", used, cap, 100 * used / cap
+        if (ctx > 0) printf "%-9s %d tokens\n", "Context", ctx
+      }' <<< "$metrics"
+  fi
+
+  IFS=, read -r name used total < <(/run/wrappers/bin/nvidia-smi -i "$COMPUTE_GPU" \
+    --query-gpu=name,memory.used,memory.total --format=csv,noheader,nounits)
+  row GPU "${name#NVIDIA GeForce } · $((used)) of $((total)) MiB"
+  if [[ -f $MODEL_DIR/$MODEL_FILE ]]; then
+    row Model "$MODEL_FILE"
+  else
+    row Model "missing: run cix llm fetch"
+  fi
+}
+
+# Samples NInfer's token counters each second; idle seconds stay out of the averages
+tps() {
+  local -a hist=()
+  local served="" model proxy last="" key
+  local m t dec pre watts mhz rate prate lout ltps lacc
+  local prev_t="" prev_dec=0 prev_pre=0
+  local busy=0 tokens=0 joules=0 peak=0
+  printf '\e[?25l'
+  trap 'printf "\e[?25h\n"' EXIT
+  while :; do
+    read -r model proxy < <(curl -fsS "$ENDPOINT/running" 2>/dev/null |
+      jq -r 'first(.running[] | select(.state == "ready")) | "\(.model) \(.proxy)"') || true
+    if [[ -z ${proxy:-} ]]; then
+      printf '\e[H\e[JNo profile loaded; waiting for a request  (q quit)\n'
+      prev_t=""
+    elif m=$(curl -fsS "$proxy/metrics" 2>/dev/null); then
+      t=$(date +%s.%N)
+      dec=$(awk '$1 == "ninfer_decode_tokens_total" { print $2 }' <<< "$m")
+      pre=$(awk '$1 == "ninfer_prefill_tokens_total" { print $2 }' <<< "$m")
+      read -r watts mhz < <(/run/wrappers/bin/nvidia-smi -i "$COMPUTE_GPU" \
+        --query-gpu=power.draw,clocks.sm --format=csv,noheader,nounits | tr -d ,)
+      # A fresh NInfer starts its counters at zero
+      [[ $proxy == "$last" ]] || prev_t=""
+      last=$proxy served=$model
+      if [[ -n $prev_t ]]; then
+        read -r rate prate busy tokens joules peak < <(awk \
+          -v t="$t" -v pt="$prev_t" -v d="$dec" -v pd="$prev_dec" -v p="$pre" -v pp="$prev_pre" \
+          -v w="$watts" -v b="$busy" -v n="$tokens" -v j="$joules" -v pk="$peak" 'BEGIN {
+            dt = t - pt; r = (d - pd) / dt
+            if (r > 0) { b += dt; n += d - pd; j += w * dt; if (r > pk) pk = r }
+            printf "%.1f %.0f %.3f %d %.1f %.1f\n", r, (p - pp) / dt, b, n, j, pk
+          }')
+        hist+=("$rate")
+        ((${#hist[@]} <= 60)) || hist=("${hist[@]:1}")
+      fi
+      prev_t=$t prev_dec=$dec prev_pre=$pre
+
+      # Speculative decoding makes one request's rate depend on its acceptance
+      read -r lout ltps lacc < <(journalctl --user -u llama-swap -n 300 -o cat --no-pager |
+        grep ' done |' | tail -1 |
+        grep -oP 'output \K[0-9,]+|decode \K[0-9.]+(?= tok/s)|accepted [0-9,/]+ \(\K[0-9.]+' |
+        paste -sd' ') || true
+      awk -v served="$served" -v w="$watts" -v mhz="$mhz" \
+        -v r="${rate:-0}" -v pr="${prate:-0}" -v b="$busy" -v n="$tokens" -v j="$joules" \
+        -v pk="$peak" -v lout="${lout:-}" -v ltps="${ltps:-}" -v lacc="${lacc:-}" \
+        -v hist="${hist[*]}" 'BEGIN {
+          k = split(hist, h, " ")
+          for (i = k; i > k - 10 && i > 0; i--) if (h[i] > 0) { s += h[i]; c++ }
+          split("▁ ▂ ▃ ▄ ▅ ▆ ▇ █", bar, " ")
+          for (i = 1; i <= k; i++)
+            spark = spark (h[i] > 0 ? bar[int(h[i] / (pk > 0 ? pk : 1) * 7.99) + 1] : " ")
+          # Padded by hand: printf widths count the blocks as three bytes each
+          for (i = k; i < 60; i++) spark = spark " "
+          printf "\033[H\033[J%s · RTX 5090 · %.0f W · %s MHz  %s\n\n", served, w, mhz,
+            (r > 0 ? "\033[32mgenerating\033[0m" : "\033[2midle\033[0m")
+          printf "  now       %7.1f tok/s\n", r
+          printf "  10 s avg  %7s tok/s   generating seconds only\n", (c ? sprintf("%.1f", s / c) : "–")
+          printf "  session   %7s tok/s   peak %.1f · %s tok/J · %d tok\n",
+            (b > 0 ? sprintf("%.1f", n / b) : "–"), pk, (j > 0 ? sprintf("%.3f", n / j) : "–"), n
+          printf "  avg power %7s W\n", (b > 0 ? sprintf("%.0f", j / b) : "–")
+          if (pr > 0) printf "  prefill   %7.0f tok/s\n", pr
+          if (ltps != "") printf "  last req  %7s tok/s   %s tok · draft accept %s%%\n", ltps, lout, lacc
+          printf "\n  %s  last 60 s\n\n  r reset session · q quit\n", spark
+        }'
+    fi
+    if read -rsn1 -t 1 key; then
+      case $key in
+        q) return ;;
+        r) busy=0 tokens=0 joules=0 peak=0 hist=() ;;
+      esac
+    # Without a terminal, read fails at once instead of timing out
+    elif (($? <= 128)); then
+      sleep 1
+    fi
+  done
+}
+
+fetch() {
+  local target=$MODEL_DIR/$MODEL_FILE
+  if [[ -f $target ]]; then
+    echo "Verifying $target"
+    printf '%s  %s\n' "$MODEL_SHA256" "$target" | sha256sum --check
+    return
+  fi
+  mkdir -p "$MODEL_DIR"
+  # Resumable; the file only gets its final name after the hash matches
+  curl -fL --retry 5 -C - -o "$target.part" \
+    "https://huggingface.co/$MODEL_REPO/resolve/$MODEL_REV/$MODEL_FILE"
+  # A bad file would otherwise be resumed on every retry
+  if ! printf '%s  %s\n' "$MODEL_SHA256" "$target.part" | sha256sum --check; then
+    rm -f "$target.part"
+    echo "Hash mismatch: download removed, run cix llm fetch again" >&2
+    exit 1
+  fi
+  mv "$target.part" "$target"
+}
+
+case ${1:-status} in
+  status) status ;;
+  unload) curl -fsS -X POST "$ENDPOINT/api/models/unload" > /dev/null && echo "Unloaded" ;;
+  logs) exec journalctl --user -u llama-swap -f ;;
+  tps) tps ;;
+  fetch) fetch ;;
+  ui) echo "$ENDPOINT/ui" ;;
+  -h | --help | help) usage ;;
+  *)
+    usage >&2
+    exit 1
+    ;;
+esac

@@ -1,0 +1,110 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<EOF
+Usage: cix backup [--check] [--auto]
+
+Backs up this host's recovery keys to 1Password as documents and checks each
+copy against the local public key. Never overwrites an existing item.
+
+  -c, --check  verify only, upload nothing
+      --auto   stay silent unless a key changed since its last verified backup
+  -h, --help   show this help
+EOF
+}
+
+check=false
+auto=false
+for arg in "$@"; do
+  case $arg in
+    -c | --check) check=true ;;
+    --auto) auto=true ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    *)
+      usage >&2
+      exit 1
+      ;;
+  esac
+done
+
+host=$(hostname)
+# Title|kind|private key|public key
+items=(
+  "$host agenix recovery key|age|$HOME/.config/agenix/identity.txt|$REPO/secrets/$host.pub"
+  "$host SSH key|ssh|$HOME/.ssh/id_ed25519|$HOME/.ssh/id_ed25519.pub"
+)
+# Public keys of verified backups, so --auto can skip 1Password
+state=${XDG_STATE_HOME:-$HOME/.local/state}/cix/backups
+mkdir -p "${state%/*}"
+touch "$state"
+
+key() {
+  awk '{print $1, $2}' "$@"
+}
+
+# Private key on stdin, public key on stdout
+derive() {
+  case $1 in
+    age) age-keygen -y ;;
+    ssh) ssh-keygen -y -f /dev/stdin ;;
+  esac | key
+}
+
+if $auto; then
+  pending=()
+  for item in "${items[@]}"; do
+    IFS='|' read -r title _ private public <<< "$item"
+    [[ -f $private && -f $public ]] || continue
+    grep -qxF "$title|$(key "$public")" "$state" || pending+=("$item")
+  done
+  ((${#pending[@]})) || exit 0
+  items=("${pending[@]}")
+fi
+
+step "Backups"
+# Any vault call triggers the app's unlock prompt; whoami does not
+if ! op vault list > /dev/null 2>&1; then
+  echo "1Password isn't reachable: unlock the app and enable CLI integration" >&2
+  exit 1
+fi
+documents=$(op item list --categories Document --format json)
+
+status=0
+for item in "${items[@]}"; do
+  IFS='|' read -r title kind private public <<< "$item"
+  if [[ ! -f $private || ! -f $public ]]; then
+    row "no key" "$title"
+    continue
+  fi
+  want=$(key "$public")
+  count=$(jq --arg t "$title" '[.[] | select(.title == $t)] | length' <<< "$documents")
+
+  if ((count > 1)); then
+    row duplicate "$title: $count items share this title, keep one"
+    status=1
+    continue
+  fi
+  if ((count == 0)); then
+    if $check || ! confirm "Upload ${private/#$HOME/\~} to 1Password as \"$title\"?"; then
+      row missing "$title"
+      status=1
+      continue
+    fi
+    op document create "$private" --title "$title" --vault Personal > /dev/null
+  fi
+
+  if [[ $(op document get "$title" | derive "$kind") == "$want" ]]; then
+    row verified "$title"
+    { grep -vF "$title|" "$state" || true; echo "$title|$want"; } > "$state.new"
+    mv "$state.new" "$state"
+  else
+    row mismatch "$title: the 1Password copy isn't this key, left untouched"
+    status=1
+  fi
+done
+
+exit "$status"

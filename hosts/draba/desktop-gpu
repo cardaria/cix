@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Match the desktop GPU by PCI IDs, never by card number
+shopt -s nullglob
+devices=()
+for pci_path in /dev/dri/by-path/pci-*-card; do
+  gpu_device=$(readlink -f "$pci_path")
+  [[ -c $gpu_device ]] || continue
+  gpu_sysfs="/sys/class/drm/${gpu_device##*/}/device"
+  [[ -r $gpu_sysfs/vendor && -r $gpu_sysfs/device &&
+     -r $gpu_sysfs/subsystem_vendor && -r $gpu_sysfs/subsystem_device ]] || continue
+  ids="$(< "$gpu_sysfs/vendor") $(< "$gpu_sysfs/device") $(< "$gpu_sysfs/subsystem_vendor") $(< "$gpu_sysfs/subsystem_device")"
+  [[ $ids == "$DESKTOP_GPU_IDS" ]] || continue
+  [[ $(readlink -f "$gpu_sysfs/driver") == "/sys/bus/pci/drivers/$DESKTOP_GPU_DRIVER" ]] || continue
+  devices+=("$gpu_device")
+done
+if [[ ${#devices[@]} -ne 1 ]]; then
+  printf 'Expected one %s using %s; found %s. Check the desktop GPU.\n' \
+    "$DESKTOP_GPU_NAME" "$DESKTOP_GPU_DRIVER" "${#devices[@]}" >&2
+  exit 1
+fi
+printf '%s\n' "${devices[0]}"

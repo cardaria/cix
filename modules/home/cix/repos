@@ -1,0 +1,191 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+owner=${CIX_REPOS_OWNER:-cardaria}
+dest=${CIX_REPOS_DEST:-$HOME/Shares/Cloud/Backups/git}
+gitlab=${CIX_REPOS_GITLAB:-git@gitlab.com:cardaria}
+state=${XDG_STATE_HOME:-$HOME/.local/state}/cix/repos
+
+usage() {
+  cat <<EOF
+Usage: cix repos [status | backup [--no-push] [--quiet] [NAME...]]
+
+Keeps a bare mirror of every GitHub repository of $owner (forks excluded) in
+$dest, and pushes branches and tags to GitLab. The mirrors never lose
+history: nothing is pruned from them, and GitLab only gets new projects as
+private ones.
+
+  status       show the last run and the age of every mirror (default)
+  backup       update the mirrors, then push them to GitLab
+      --no-push  update the mirrors only
+      --quiet    print only failures
+  -h, --help   show this help
+
+Environment (the server's nightly job sets these):
+  CIX_REPOS_HTTPS      read GitHub over HTTPS with the token in GH_TOKEN, not over SSH
+  HEALTHCHECKS_URL     ping it after a full run, and its /fail when a run fails
+EOF
+}
+
+die() {
+  echo "cix repos: $*" >&2
+  exit 1
+}
+
+# Network hiccups right after login or resume are common; try a few times
+retry() {
+  local i
+  for i in 1 2 3; do
+    "$@" && return 0
+    [[ $i -lt 3 ]] && sleep 20
+  done
+  return 1
+}
+
+# Reading GitHub: with a token over HTTPS on the server, with the SSH key on the workstation
+if [[ -n ${CIX_REPOS_HTTPS:-} ]]; then
+  github_git() { git -c credential.helper= -c 'credential.helper=!gh auth git-credential' "$@"; }
+  url_field=url
+else
+  github_git() { git "$@"; }
+  url_field=sshUrl
+fi
+
+hb_enabled=false
+hb_ok=false
+heartbeat() {
+  $hb_enabled || return 0
+  [[ -n ${HEALTHCHECKS_URL:-} ]] || return 0
+  if $hb_ok; then
+    curl --fail --silent --show-error --max-time 10 --retry 3 --output /dev/null "$HEALTHCHECKS_URL" || true
+  else
+    curl --fail --silent --show-error --max-time 10 --retry 3 --output /dev/null "$HEALTHCHECKS_URL/fail" || true
+  fi
+}
+
+require_share() {
+  if [[ $dest == "$HOME/Shares/Cloud"/* ]]; then
+    mountpoint -q "$HOME/Shares/Cloud" || die "the share is not mounted, refusing to write to the local disk"
+  fi
+}
+
+backup() {
+  local push=true quiet=false only=() arg
+  for arg in "$@"; do
+    case $arg in
+      --no-push) push=false ;;
+      --quiet) quiet=true ;;
+      -h | --help)
+        usage
+        exit 0
+        ;;
+      -*) die "unknown option $arg" ;;
+      *) only+=("$arg") ;;
+    esac
+  done
+
+  require_share
+  mkdir -p "$dest" "$(dirname "$state")"
+
+  # One run at a time: the nightly job and a manual run must not collide
+  exec 9>"$(dirname "$state")/repos.lock"
+  flock -n 9 || die "another backup is running"
+
+  # A heartbeat only means something for a full run
+  if [[ ${#only[@]} -eq 0 ]] && $push; then
+    hb_enabled=true
+    trap heartbeat EXIT
+  fi
+
+  local list
+  list=$(retry gh repo list "$owner" --limit 200 --source \
+    --json name,sshUrl,url,visibility \
+    --jq ".[] | [.name, .$url_field, .visibility] | @tsv") \
+    || die "could not list the repositories of $owner (is gh logged in?)"
+  [[ -n $list ]] || die "GitHub returned no repositories"
+
+  local rows ok=0 failed=0 row name url vis mirror log
+  mapfile -t rows <<<"$list"
+  log=$(mktemp)
+  trap 'rm -f "$log"' RETURN
+
+  $quiet || step "Mirrors in $dest"
+  for row in "${rows[@]}"; do
+    IFS=$'\t' read -r name url vis <<<"$row"
+    if [[ ${#only[@]} -gt 0 ]] && ! printf '%s\n' "${only[@]}" | grep -qx -- "$name"; then
+      continue
+    fi
+    mirror=$dest/$name.git
+    if [[ -d $mirror ]]; then
+      # The mirror may have been made over the other protocol
+      git -C "$mirror" remote set-url origin "$url"
+      retry github_git -C "$mirror" remote update --prune </dev/null >"$log" 2>&1 || {
+        echo "FAILED  $name: could not update the mirror" >&2
+        sed 's/^/        /' "$log" >&2
+        failed=$((failed + 1))
+        continue
+      }
+    else
+      retry github_git clone --quiet --mirror "$url" "$mirror" </dev/null >"$log" 2>&1 || {
+        echo "FAILED  $name: could not clone" >&2
+        sed 's/^/        /' "$log" >&2
+        failed=$((failed + 1))
+        continue
+      }
+      # Keep every change to every ref, and never delete an object
+      git -C "$mirror" config core.logAllRefUpdates always
+      git -C "$mirror" config gc.auto 0
+    fi
+    if $push; then
+      retry git -C "$mirror" push --quiet --prune "$gitlab/$name.git" \
+        '+refs/heads/*:refs/heads/*' '+refs/tags/*:refs/tags/*' </dev/null >"$log" 2>&1 || {
+        echo "FAILED  $name: could not push to GitLab" >&2
+        sed 's/^/        /' "$log" >&2
+        failed=$((failed + 1))
+        continue
+      }
+    fi
+    ok=$((ok + 1))
+    $quiet || printf '%-4s %-22s %-8s %s\n' ok "$name" "${vis,,}" \
+      "$(git -C "$mirror" log -1 --format='last commit %cr' 2>/dev/null || echo 'empty')"
+  done
+
+  printf '%s\t%s\t%s\n' "$(date -u +%FT%TZ)" "$ok" "$failed" >"$state"
+  $quiet || row "result" "$ok ok, $failed failed"
+  [[ $failed -eq 0 ]] && hb_ok=true
+  [[ $failed -eq 0 ]]
+}
+
+status() {
+  step "Repository backups"
+  if [[ -f $state ]]; then
+    local when ok failed
+    IFS=$'\t' read -r when ok failed <"$state"
+    row "last run" "$when ($ok ok, $failed failed)"
+  else
+    row "last run" "never"
+  fi
+  row "mirrors" "$dest"
+  if [[ -d $dest ]]; then
+    local m
+    step "Mirrors"
+    for m in "$dest"/*.git; do
+      [[ -d $m ]] || continue
+      printf '%-24s %s\n' "$(basename "$m" .git)" \
+        "$(git -C "$m" log -1 --format='last commit %cr' 2>/dev/null || echo 'empty')"
+    done
+  fi
+}
+
+case ${1:-status} in
+  status) status ;;
+  backup)
+    shift
+    backup "$@"
+    ;;
+  -h | --help) usage ;;
+  *)
+    usage >&2
+    exit 1
+    ;;
+esac

@@ -1,0 +1,182 @@
+{
+  "nodes": {
+    "agenix": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1790734419,
+        "narHash": "sha256-n7wew722m1OTBT9DOIMxNX/NF4zfsSUABAO5eW3wikE=",
+        "owner": "ryantm",
+        "repo": "agenix",
+        "rev": "3daa710894355fa2fad8243380af373a2b4046ef",
+        "type": "github"
+      },
+      "original": {
+        "owner": "ryantm",
+        "repo": "agenix",
+        "type": "github"
+      }
+    },
+    "chandra-model": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1782470686,
+        "narHash": "sha256-673kKeRcVDUQavvbFAwCLy46aOXj0YGqW9A1XFuxCAI=",
+        "ref": "refs/heads/main",
+        "rev": "af93b47dba1b47b6640c86ccf487ed2260ab9a09",
+        "revCount": 13,
+        "type": "git",
+        "url": "https://huggingface.co/datalab-to/chandra-ocr-2"
+      },
+      "original": {
+        "type": "git",
+        "url": "https://huggingface.co/datalab-to/chandra-ocr-2"
+      }
+    },
+    "chandra-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1782469607,
+        "narHash": "sha256-m0Lk0h7I8fODZEuL5bi+6HL5C3hN6+sScyCKMAALypM=",
+        "owner": "datalab-to",
+        "repo": "chandra",
+        "rev": "d4f7467435aa4137d9539f000ddf0b7ced3eb43f",
+        "type": "github"
+      },
+      "original": {
+        "owner": "datalab-to",
+        "repo": "chandra",
+        "type": "github"
+      }
+    },
+    "disko": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1789770686,
+        "narHash": "sha256-uZkBR7yHdIKUFB5SZdfgh1qkGfI3XmYmI/lTiquxbck=",
+        "owner": "nix-community",
+        "repo": "disko",
+        "rev": "725ea35e410ad83be4931d1bff7e090eacaf3563",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-community",
+        "repo": "disko",
+        "type": "github"
+      }
+    },
+    "home-manager": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1792098797,
+        "narHash": "sha256-u4DIIZgznEGzByxXrxWCXK19VcMtTBmi/M9gZ7Jk9bM=",
+        "owner": "nix-community",
+        "repo": "home-manager",
+        "rev": "640725978b99076e18e069f6e7d2959124584f8f",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-community",
+        "repo": "home-manager",
+        "type": "github"
+      }
+    },
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1792094642,
+        "narHash": "sha256-zp8ToDMnqZcu4o4IH9pdwXFXGp7yLm/M0dEnNWnyd7I=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "fe13242281a67641c0102cdb1087f0ebe586c7df",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixos-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "nixpkgs-cuda": {
+      "locked": {
+        "lastModified": 1791734076,
+        "narHash": "sha256-i5qk1kLiit98rRbh1AXmWBNT9QXC/y4l5Wk/u5EdpDQ=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "7fd4004d0511991fff3a0524856a9be09e28c5f0",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixos-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "plasma-manager": {
+      "inputs": {
+        "home-manager": [
+          "home-manager"
+        ],
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1785762349,
+        "narHash": "sha256-jZhZkzAwc7f3exzcTDJWP2WCAchCv0iNC3UF/QsahdQ=",
+        "owner": "nix-community",
+        "repo": "plasma-manager",
+        "rev": "a19a2a029fa180911bd89c554dca1616e10f4c1d",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-community",
+        "repo": "plasma-manager",
+        "type": "github"
+      }
+    },
+    "pve": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1792799105,
+        "narHash": "sha256-RNF31eb/4B1DsInQ8gGSKClGreHk8OnORi3h45H53E0=",
+        "ref": "refs/heads/main",
+        "rev": "870ee084d91fc59890a12fee034ffae763688065",
+        "revCount": 41,
+        "type": "git",
+        "url": "ssh://git@github.com/cardaria/pve"
+      },
+      "original": {
+        "type": "git",
+        "url": "ssh://git@github.com/cardaria/pve"
+      }
+    },
+    "root": {
+      "inputs": {
+        "agenix": "agenix",
+        "chandra-model": "chandra-model",
+        "chandra-src": "chandra-src",
+        "disko": "disko",
+        "home-manager": "home-manager",
+        "nixpkgs": "nixpkgs",
+        "nixpkgs-cuda": "nixpkgs-cuda",
+        "plasma-manager": "plasma-manager",
+        "pve": "pve"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}

@@ -1,0 +1,17 @@
+diff --git a/src/driver/kwin/kwindriver.ts b/src/driver/kwin/kwindriver.ts
+--- a/src/driver/kwin/kwindriver.ts
++++ b/src/driver/kwin/kwindriver.ts
+@@ -388,6 +388,13 @@
+ 
+     this.connect(this.workspace.windowAdded, (client: Window) => {
+       if (!client) return;
++      // KWin gives scripts no work-area signal; a panel has reserved its strip once added
++      if (client.dock) {
++        this.control.onSurfaceUpdate(this);
++        this.connect(client.frameGeometryChanged, () => {
++          this.control.onSurfaceUpdate(this);
++        });
++      }
+       LOG?.send(
+         LogModules.windowAdded,
+         "eventFired",

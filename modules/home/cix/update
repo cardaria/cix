@@ -1,0 +1,211 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  echo "Usage: cix update <target> [options]"
+  echo
+  echo "Targets:"
+  printf '  %-12s %s\n' \
+    "${HOSTNAME:-<this host>}" "this machine: update its inputs, check and build a fixed source" \
+    "" "snapshot, review the changes, then ask to install it for the next" \
+    "" "boot. Reboot yourself when ready." \
+    pve "every guest on the Proxmox host pve, stage by stage;" \
+    "" "then what the host itself has pending" \
+    "<guest>" "one guest on pve"
+  cat <<EOF2
+Without a target, cix update lists the guests and changes nothing.
+
+Options for this machine:
+  -c, --cuda     also bump the CUDA pin (recompiles the CUDA packages)
+  -n, --dry-run  update, check and build only; no privileged commands
+      --no-update  use the existing lock file, including for a retry
+  -h, --help     show this help
+
+Options for pve and its guests:
+  -n, --dry-run  update, check, build and review only; deploy nothing
+      --no-update  deploy the current lock file and image pins, for a retry
+      --no-images  leave the container image pins as they are
+EOF2
+}
+
+target=
+opts=()
+for arg in "$@"; do
+  case $arg in
+    -h | --help) usage; exit 0 ;;
+    -*) opts+=("$arg") ;;
+    *)
+      [[ -z $target ]] || { usage >&2; exit 1; }
+      target=$arg
+      ;;
+  esac
+done
+
+# The guests are the pve repo's systems that are machines in their own registry
+guests() {
+  # shellcheck disable=SC2016
+  nix eval --json --option warn-dirty false "$PVE#nixosConfigurations" --apply \
+    'cs: builtins.filter (n: ((cs.${n}.config.pve or { }).machines or { }) ? ${n}) (builtins.attrNames cs)' |
+    jq -r '.[]'
+}
+
+host=$(hostname)
+if [[ -z $target ]]; then
+  usage
+  printf '\nGuests on pve: %s\n' "$(guests | paste -sd ' ')"
+  exit 0
+fi
+if [[ $target != "$host" ]]; then
+  known=$(guests)
+  if [[ $target == pve ]] || grep -qx -- "$target" <<<"$known"; then
+    exec cix-update-pve "$target" "${opts[@]}"
+  fi
+  echo "cix update: unknown target '$target'. Run cix update to list the targets." >&2
+  exit 1
+fi
+
+inputs=(nixpkgs home-manager plasma-manager chandra-src chandra-model pve)
+dry=false
+update=true
+cuda=false
+for arg in "${opts[@]}"; do
+  case $arg in
+    -c | --cuda) cuda=true ;;
+    -n | --dry-run) dry=true ;;
+    --no-update) update=false ;;
+    *) usage >&2; exit 1 ;;
+  esac
+done
+if $cuda && ! $update; then
+  echo "--cuda and --no-update cannot be combined" >&2
+  exit 1
+fi
+$cuda && inputs+=(nixpkgs-cuda)
+
+cd "$REPO"
+umask 077
+# Keep the lock inode in place so waiting processes cannot bypass it
+exec 9> "$(git rev-parse --git-common-dir)/cix-update.lock"
+flock -n 9 || { echo "Another cix update is running" >&2; exit 1; }
+
+untracked=$(git ls-files --others --exclude-standard)
+if [[ -n $untracked ]]; then
+  printf 'Git flakes exclude untracked files. Review and stage intended files first:\n%s\n' "$untracked" >&2
+  exit 1
+fi
+changes=$(git status --short)
+if [[ -n $changes ]]; then
+  printf 'Working tree changes will be included:\n%s\n' "$changes"
+  confirm "Build with these changes?" || exit 1
+fi
+
+state=${XDG_STATE_HOME:-$HOME/.local/state}/cix/updates
+mkdir -p "$state"
+run=$(mktemp -d "$state/run.XXXXXXXX")
+phase=prepare
+out=
+previous=$(readlink -e /nix/var/nix/profiles/system)
+current=$(readlink -e /run/current-system)
+
+finish() {
+  local status=$?
+  if ((status)); then
+    printf '\nUpdate stopped during %s (status %s). Logs: %s\n' "$phase" "$status" "$run" >&2
+    echo "The lock file may have changed; retry with cix update --no-update." >&2
+    if [[ $phase == boot ]]; then
+      echo "Boot installation did not complete. The system profile or boot menu may be partially updated." >&2
+      echo "Resolve the error and retry this exact build before rebooting:" >&2
+      printf '  sudo nixos-rebuild boot --store-path %q --no-reexec\n' "$out" >&2
+      echo "Or restore the previous boot configuration:" >&2
+      printf '  sudo nixos-rebuild boot --store-path %q --no-reexec\n' "$previous" >&2
+    fi
+  fi
+}
+trap finish EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap 'exit 129' HUP
+
+logged() {
+  "$@" 2>&1 | tee "$run/$phase.log"
+}
+
+phase=backups
+if ! cix-backup --auto --check; then
+  echo "Recovery-key backup verification failed. Run cix backup, then retry." >&2
+  exit 1
+fi
+
+if $update; then
+  phase=inputs
+  step "Inputs"
+  logged nix flake update "${inputs[@]}"
+  git diff --stat -- flake.lock
+fi
+
+# Both validation and the build consume the same immutable Git-flake snapshot
+phase=snapshot
+nix flake metadata --json --no-update-lock-file . > "$run/source.json" 2> >(tee "$run/snapshot.log" >&2)
+source=$(jq -er '.path' "$run/source.json")
+[[ $source == /nix/store/* && -f $source/flake.nix ]]
+
+phase=checks
+step "Checks"
+logged nix flake check "$source" --no-update-lock-file
+
+phase=build
+step "Build"
+# The output link protects the candidate from concurrent garbage collection
+nix build "$source#nixosConfigurations.$host.config.system.build.toplevel" \
+  --out-link "$run/result" --print-out-paths --no-update-lock-file \
+  > "$run/build.out" 2> >(tee "$run/build.log" >&2)
+out=$(readlink -e "$run/result")
+[[ $out == /nix/store/* && -x $out/bin/switch-to-configuration ]]
+printf 'Candidate: %s\nPrevious boot configuration: %s\n' "$out" "$previous"
+printf '%s\n' "$out" > "$run/candidate"
+printf '%s\n' "$previous" > "$run/previous"
+
+phase=smoke-check
+if [[ -x $out/sw/bin/nvidia-smi ]]; then
+  "$out/sw/bin/nvidia-smi" --help > "$run/nvidia-smi.log" 2>&1 || {
+    echo "The candidate NVIDIA utility cannot start; refusing boot installation. See $run/nvidia-smi.log" >&2
+    exit 1
+  }
+fi
+
+phase=changes
+step "Changes at next boot"
+logged nix store diff-closures "$previous" "$out"
+if [[ $current == *display-5090* ]]; then
+  [[ -x $out/specialisation/display-5090/bin/switch-to-configuration ]] || {
+    echo "The candidate is missing your display-5090 entry" >&2
+    exit 1
+  }
+  echo "Keep selecting display-5090 in GRUB for the HDMI desktop. The base entry uses DisplayPort."
+fi
+printf 'Build and logs retained at %s\n' "$run"
+$dry && exit 0
+
+step "Next boot"
+echo "This updates the boot menu. The running desktop stays on its current configuration."
+echo "A successful build does not verify login, graphics or other runtime behavior."
+confirm "Install this build for the next boot?" || exit 0
+
+# Another deployment tool may have changed the system while this build ran
+if [[ $(readlink -e /nix/var/nix/profiles/system) != "$previous" ||
+      $(readlink -e /run/current-system) != "$current" ]]; then
+  echo "The running system or boot profile changed during this update. Review again with --no-update." >&2
+  exit 1
+fi
+phase=boot
+logged sudo nixos-rebuild boot --store-path "$out" --no-reexec
+[[ $(readlink -e /nix/var/nix/profiles/system) == "$out" ]] || {
+  echo "The system profile does not point to the candidate" >&2
+  exit 1
+}
+# The registered system generation now protects this closure from collection
+rm -- "$run/result" || echo "Could not remove the temporary GC root: $run/result" >&2
+phase=complete
+echo "Boot installation completed. Save your work and reboot when ready."
+echo "If the new boot fails, choose the previous generation in GRUB."
+echo "After reboot: check your apps, systemctl --failed, and systemctl --user --failed."
