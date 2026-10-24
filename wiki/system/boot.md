@@ -2,7 +2,7 @@
 title: Boot and recovery
 category: system
 tags: [grub, windows, rollback, disko, live-iso, install]
-updated: 2026-10-22
+updated: 2026-10-24
 ---
 
 # Boot and recovery
@@ -51,9 +51,13 @@ shows. The boot after that returns to GRUB as usual.
 - **System works:**
 
 ```sh
-sudo nixos-rebuild switch --rollback --no-reexec
+cix rollback draba --list
+cix rollback draba
 ```
 
+The command reviews an older generation and asks before preparing it for the next boot;
+reboot yourself, selecting the same GPU specialisation. See
+[rollback options](../dev/cli.md#rolling-back) for explicit generation selection and guest rollback.
 Then revert the faulty change in Git separately. Generations do not restore
 live dotfiles or user data.
 

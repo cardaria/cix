@@ -58,7 +58,9 @@ def running(guest):
 
 def broken():
     # A guest named in fail as broken:<guest> fails the checks while it runs its new build
-    return any(f.startswith('broken:') and running(f[7:]) == str(root / 'store' / (f[7:] + '-new')) for f in fail)
+    return any(f.startswith('broken:') and running(f[7:]) == str(root / 'store' / (f[7:] + '-new')) for f in fail) or any(
+        f.startswith('badrollback:') and running(f[12:]) == str(root / 'store' / (f[12:] + '-older')) for f in fail) or any(
+        f.startswith('needsrollback:') and running(f[14:]) == str(root / 'store' / (f[14:] + '-old')) for f in fail)
 
 if name == 'nix':
     action = ' '.join(args[:2])
@@ -84,10 +86,19 @@ if name == 'nix':
     elif args[:2] == ['path-info', '--json']:
         print('{}')
     elif args[0] == 'copy':
-        assert args[1:3] == ['--no-check-sigs', '--to'] and args[3].startswith('ssh-ng://root@'), args
+        if args[1] == '--from':
+            assert args[2].startswith('ssh-ng://root@'), args
+        else:
+            assert args[1:3] == ['--no-check-sigs', '--to'] and args[3].startswith('ssh-ng://root@'), args
+            guest = by_address[args[3].split('@')[1]]
+            if 'drift:' + guest in fail:
+                (root / 'running' / guest).write_text(str(root / 'store' / (guest + '-new')))
     else:
         raise AssertionError(args)
 elif name == 'nix-store':
+    if args[0] == '--add-root':
+        p(args[1]).symlink_to(args[-1])
+        sys.exit(0)
     assert args[0] == '-qR', args
     print('\n'.join(['/nix/store/' + 'a' * 32 + '-player-1.43.4', '/nix/store/' + 'a' * 32 + '-glibc-2.40']
                     if args[1].endswith('-old') else
@@ -99,10 +110,26 @@ elif name == 'ssh':
     if host == registry['host']:
         print('apt\t1 update · apt full-upgrade\nkernel\t7.0, the newest installed')
     elif command[:2] == ['systemctl', 'list-units']:
-        if 'units:' + guest in fail:
+        if 'units:' + guest in fail and running(guest).endswith('-old'):
             print('broken.service loaded failed failed Broken')
     elif command == ['readlink', '-f', '/run/current-system']:
         print(running(guest))
+    elif command == ['readlink', '-f', '/nix/var/nix/profiles/system']:
+        print(running(guest))
+    elif command[:2] == ['readlink', '-e']:
+        if 'collected:' + guest in fail:
+            sys.exit(1)
+        print(str(root / 'store' / (guest + ('-older' if command[2].endswith('system-1-link') else '-old'))))
+    elif command == ['command', '-v', 'nixos-rebuild']:
+        print('/run/current-system/sw/bin/nixos-rebuild')
+    elif command[0] == 'nixos-rebuild':
+        subprocess = __import__('subprocess')
+        sys.exit(subprocess.run([str(root / 'bin/nixos-rebuild'), *command[1:4], '--target-host', 'root@' + host, *command[4:]]).returncode)
+    elif len(command) == 1 and 'profile=/nix/var/nix/profiles/system' in command[0]:
+        print('current\t2\t' + running(guest))
+        print('2\t' + running(guest))
+        if 'no-older' not in fail:
+            print('1\t' + str(root / 'store' / (guest + '-older')))
     elif command[0] == 'nix-store':
         subprocess = __import__('subprocess')
         sys.exit(subprocess.run([str(root / 'bin/nix-store'), *command[1:]]).returncode)
@@ -162,7 +189,7 @@ class UpdatePve(unittest.TestCase):
         (self.root / 'store/source/flake.nix').write_text('{}\n')
         (self.root / 'running').mkdir()
         for guest in GUESTS:
-            for kind in ('old', 'new'):
+            for kind in ('old', 'new', 'older'):
                 target = self.root / 'store' / f'{guest}-{kind}' / 'bin'
                 target.mkdir(parents=True)
                 (target / 'switch-to-configuration').write_text('#!/bin/sh\nexit 99\n')
@@ -175,7 +202,7 @@ class UpdatePve(unittest.TestCase):
         mock.chmod(0o755)
         for name in ('nix', 'nix-store', 'ssh', 'nixos-rebuild', 'skopeo', 'curl', 'dig', 'timeout', 'sleep'):
             (bindir / name).symlink_to(mock)
-        script = (SOURCE / 'steps.sh').read_text() + (SOURCE / 'update-pve').read_text()
+        script = (SOURCE / 'steps.sh').read_text() + (SOURCE / 'generations.sh').read_text() + (SOURCE / 'update-pve').read_text()
         script = script.replace('/nix/store/', str(self.root / 'store') + '/')
         self.script = self.root / 'update-pve'
         self.script.write_text(script)
@@ -267,6 +294,100 @@ class UpdatePve(unittest.TestCase):
         self.assertIn('other guests take them at their next deploy', self.output)
         self.assertNotIn('Proxmox host', self.output)
         self.assertFalse(any(c[0] == 'nix' and c[1] == 'build' and '.alpha.' in c[2] for c in self.calls))
+
+    def test_selected_guests_use_the_same_stages_and_one_review(self):
+        self.assertEqual(self.run_update('edge', 'gamma', 'edge', '--no-update'), 0, self.output)
+        self.assertEqual(self.deploys(), [GUESTS[g][0] for g in ('gamma', 'edge')])
+        self.assertEqual(self.running('watch'), 'watch-old')
+        self.assertIn('Order: gamma → edge', self.output)
+        self.assertEqual(self.output.count('\nDeploy\n'), 1)
+        self.assertNotIn('Proxmox host', self.output)
+
+    def test_all_selected_guests_are_validated_before_updating(self):
+        self.assertNotEqual(self.run_update('gamma', 'missing'), 0)
+        self.assertEqual(self.deploys(), [])
+        self.assertFalse(any(c[:3] == ['nix', 'flake', 'update'] for c in self.calls))
+
+    def test_group_cannot_be_mixed_with_guests(self):
+        self.assertNotEqual(self.run_update('pve', 'gamma'), 0)
+        self.assertEqual(self.calls, [])
+
+    def test_stale_review_is_not_deployed_or_automatically_undone(self):
+        self.assertNotEqual(self.run_update('edge', '--no-update', fail='drift:edge'), 0)
+        self.assertEqual(self.deploys(), [])
+        self.assertIn('changed since the review', self.output)
+
+    def rollback(self, *args, **kwargs):
+        self.env['CIX_ACTION'] = 'rollback'
+        return self.run_update(*args, **kwargs)
+
+    def test_rollback_uses_retained_closures_without_building_or_editing(self):
+        self.assertEqual(self.rollback('edge', 'gamma'), 0, self.output)
+        self.assertEqual(self.deploys(), [GUESTS[g][0] for g in ('gamma', 'edge')])
+        self.assertEqual(self.running('gamma'), 'gamma-older')
+        self.assertEqual(self.running('edge'), 'edge-older')
+        self.assertIn('generation 1', self.output)
+        self.assertFalse(any(c[0] == 'skopeo' or c[:3] == ['nix', 'flake', 'update'] or c[:2] == ['nix', 'build'] or 'pull' in c for c in self.calls))
+        self.assertEqual(self.git('status', '--short'), '')
+
+    def test_rollback_listing_never_copies_or_activates(self):
+        self.assertEqual(self.rollback('pve', '--list'), 0, self.output)
+        self.assertIn('generation 1', self.output)
+        self.assertEqual(self.deploys(), [])
+        self.assertFalse(any(c[:2] == ['nix', 'copy'] for c in self.calls))
+
+    def test_rollback_dry_run_and_decline_never_touch_guests(self):
+        self.assertEqual(self.rollback('gamma', '--dry-run'), 0, self.output)
+        self.assertEqual(self.deploys(), [])
+        self.assertFalse(any(c[:3] == ['nix', 'copy', '--no-check-sigs'] for c in self.calls))
+        self.assertEqual(self.rollback('gamma', reply='n\n'), 0, self.output)
+        self.assertEqual(self.deploys(), [])
+
+    def test_rollback_explicit_generation_and_missing_generation(self):
+        self.assertEqual(self.rollback('gamma', '--generation', '1', '--dry-run'), 0, self.output)
+        self.assertNotEqual(self.rollback('gamma', '--generation', '99'), 0)
+        self.assertEqual(self.deploys(), [])
+
+    def test_rollback_generation_requires_one_target(self):
+        self.assertNotEqual(self.rollback('edge', 'gamma', '--generation', '1'), 0)
+        self.assertEqual(self.calls, [])
+
+    def test_rollback_does_not_require_a_clean_working_tree(self):
+        (self.repo / 'new.nix').write_text('{}')
+        self.assertEqual(self.rollback('gamma'), 0, self.output)
+        self.assertEqual(self.running('gamma'), 'gamma-older')
+
+    def test_rollback_can_recover_failed_units_and_checks(self):
+        self.assertEqual(self.rollback('gamma', fail='units:gamma,needsrollback:gamma', reply='y\ny\n'), 0, self.output)
+        self.assertIn('has failed units', self.output)
+        self.assertEqual(self.running('gamma'), 'gamma-older')
+
+    def test_rollback_does_not_hide_persisting_failures(self):
+        self.assertNotEqual(self.rollback('gamma', fail='down:32400', reply='y\ny\n'), 0)
+        self.assertIn('Failing checks: player', self.output)
+
+    def test_failed_rollback_stops_and_gateway_recovers(self):
+        self.assertNotEqual(self.rollback('edge', fail='badrollback:edge'), 0)
+        self.assertEqual(self.running('edge'), 'edge-old')
+        self.assertIn('back on its previous build and healthy', self.output)
+
+    def test_missing_earlier_generation_blocks_all_deployments(self):
+        self.assertNotEqual(self.rollback('edge', 'gamma', fail='no-older'), 0)
+        self.assertEqual(self.deploys(), [])
+
+    def test_generation_collected_during_review_is_not_activated(self):
+        self.assertNotEqual(self.rollback('edge', fail='collected:edge'), 0)
+        self.assertEqual(self.deploys(), [])
+        self.assertIn('selected generation is no longer available', self.output)
+
+    def test_verbose_rollback_fails_closed_without_an_older_generation(self):
+        self.assertNotEqual(self.rollback('gamma', '--verbose', fail='no-older'), 0)
+        self.assertEqual(self.deploys(), [])
+
+    def test_failed_automatic_recovery_does_not_claim_the_guest_is_restored(self):
+        self.assertNotEqual(self.run_update('edge', '--no-update', fail='switch:edge'), 0)
+        self.assertIn('automatic recovery failed', self.output)
+        self.assertNotIn('back on its previous build and healthy', self.output)
 
     def test_host_is_reported_for_pve_only(self):
         self.run_update(reply='n\n')

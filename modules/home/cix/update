@@ -1,8 +1,31 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+action=${CIX_ACTION:-update}
+[[ $action == update || $action == rollback ]] || exit 1
+
 usage() {
-  echo "Usage: cix update <target> [options]"
+  if [[ $action == rollback ]]; then
+    cat << EOF2
+Usage: cix rollback <target> [<guest> ...] [options]
+
+Targets: ${HOSTNAME:-<this host>}, pve, or one or more guest names.
+This machine: prepare an older system generation for the next boot.
+Guests: review older generations, then activate and check them stage by stage.
+
+Options:
+      --list          list retained generations; change nothing
+      --generation N  select a generation explicitly (one target only)
+  -n, --dry-run       review only; activate nothing
+  -v, --verbose       show every command's full output
+  -h, --help          show this help
+
+Without --generation, choose the earlier distinct generation of each profile.
+No inputs, image pins, Git files or application data are reverted.
+EOF2
+    return
+  fi
+  echo "Usage: cix update <target> [<guest> ...] [options]"
   echo
   echo "Targets:"
   printf '  %-12s %s\n' \
@@ -11,8 +34,8 @@ usage() {
     "" "boot. Reboot yourself when ready." \
     pve "every guest on the Proxmox host pve, stage by stage;" \
     "" "then what the host itself has pending" \
-    "<guest>" "one guest on pve"
-  cat <<EOF2
+    "<guest> ..." "selected guests on pve, in registry stage order"
+  cat << EOF2
 Without a target, cix update lists the guests and changes nothing.
 
 Options for this machine:
@@ -30,16 +53,31 @@ Options for pve and its guests:
 EOF2
 }
 
-target=
+requested=()
 opts=()
-for arg in "$@"; do
+while (($#)); do
+  arg=$1
+  shift
   case $arg in
-    -h | --help) usage; exit 0 ;;
-    -*) opts+=("$arg") ;;
-    *)
-      [[ -z $target ]] || { usage >&2; exit 1; }
-      target=$arg
-      ;;
+  -h | --help)
+    usage
+    exit 0
+    ;;
+  --generation)
+    [[ $action == rollback && ${1:-} =~ ^[1-9][0-9]*$ ]] || {
+      usage >&2
+      exit 1
+    }
+    opts+=("$arg" "$1")
+    shift
+    ;;
+  -*) opts+=("$arg") ;;
+  *)
+    for existing in "${requested[@]}"; do
+      [[ $arg != "$existing" ]] || continue 2
+    done
+    requested+=("$arg")
+    ;;
   esac
 done
 
@@ -52,31 +90,63 @@ guests() {
 }
 
 host=$(hostname)
-if [[ -z $target ]]; then
+if ((${#requested[@]} == 0)); then
   usage
   printf '\nGuests on pve: %s\n' "$(guests | paste -sd ' ')"
   exit 0
 fi
+target=${requested[0]}
+if ((${#requested[@]} > 1)) && [[ " ${requested[*]} " == *" $host "* || " ${requested[*]} " == *" pve "* ]]; then
+  echo "Use this machine or pve alone; only guest names can be combined." >&2
+  exit 1
+fi
 if [[ $target != "$host" ]]; then
   known=$(guests)
-  if [[ $target == pve ]] || grep -qx -- "$target" <<<"$known"; then
-    exec cix-update-pve "$target" "${opts[@]}"
-  fi
-  echo "cix update: unknown target '$target'. Run cix update to list the targets." >&2
-  exit 1
+  for target in "${requested[@]}"; do
+    if [[ $target != pve ]] && ! grep -qx -- "$target" <<< "$known"; then
+      echo "cix $action: unknown target '$target'. Run cix $action to list the targets." >&2
+      exit 1
+    fi
+  done
+  export CIX_ACTION=$action
+  exec cix-update-pve "${requested[@]}" "${opts[@]}"
 fi
 
 inputs=(nixpkgs home-manager plasma-manager chandra-src chandra-model pve)
 dry=false
 update=true
 cuda=false
-for arg in "${opts[@]}"; do
-  case $arg in
-    -c | --cuda) cuda=true ;;
+list=false
+generation=
+set -- "${opts[@]}"
+while (($#)); do
+  arg=$1
+  shift
+  if [[ $action == rollback ]]; then
+    case $arg in
+    --list) list=true ;;
+    --generation)
+      generation=$1
+      shift
+      ;;
     -n | --dry-run) dry=true ;;
-    --no-update) update=false ;;
     -v | --verbose) ui_verbose=true ;;
-    *) usage >&2; exit 1 ;;
+    *)
+      usage >&2
+      exit 1
+      ;;
+    esac
+    continue
+  fi
+  case $arg in
+  -c | --cuda) cuda=true ;;
+  -n | --dry-run) dry=true ;;
+  --no-update) update=false ;;
+  -v | --verbose) ui_verbose=true ;;
+  *)
+    usage >&2
+    exit 1
+    ;;
   esac
 done
 if $cuda && ! $update; then
@@ -89,18 +159,23 @@ cd "$REPO"
 umask 077
 # Keep the lock inode in place so waiting processes cannot bypass it
 exec 9> "$(git rev-parse --git-common-dir)/cix-update.lock"
-flock -n 9 || { echo "Another cix update is running" >&2; exit 1; }
-
-untracked=$(git ls-files --others --exclude-standard)
-if [[ -n $untracked ]]; then
-  printf 'Git flakes exclude untracked files. Review and stage intended files first:\n%s\n' "$untracked" >&2
+flock -n 9 || {
+  echo "Another cix update or rollback is running" >&2
   exit 1
-fi
-changes=$(git status --short)
-if [[ -n $changes ]]; then
-  section "Uncommitted changes"
-  while IFS= read -r line; do printf '  %s\n' "$line"; done <<< "$changes"
-  ask "Build with these changes?" || exit 1
+}
+
+if [[ $action == update ]]; then
+  untracked=$(git ls-files --others --exclude-standard)
+  if [[ -n $untracked ]]; then
+    printf 'Git flakes exclude untracked files. Review and stage intended files first:\n%s\n' "$untracked" >&2
+    exit 1
+  fi
+  changes=$(git status --short)
+  if [[ -n $changes ]]; then
+    section "Uncommitted changes"
+    while IFS= read -r line; do printf '  %s\n' "$line"; done <<< "$changes"
+    ask "Build with these changes?" || exit 1
+  fi
 fi
 
 state=${XDG_STATE_HOME:-$HOME/.local/state}/cix/updates
@@ -121,7 +196,7 @@ finish() {
       printf '    sudo nixos-rebuild boot --store-path %q --no-reexec\n' "$out" >&2
       note "or restore the previous boot configuration:" >&2
       printf '    sudo nixos-rebuild boot --store-path %q --no-reexec\n' "$previous" >&2
-    elif [[ $phase != prepare && $phase != backups ]]; then
+    elif [[ $action == update && $phase != prepare && $phase != backups ]]; then
       note "The lock file may have changed; retry with cix update $host --no-update" >&2
     fi
     note "Log  ${run/#$HOME/\~}" >&2
@@ -156,65 +231,80 @@ all_changes() {
   echo
 }
 
-section "cix update $host"
+section "cix $action $host"
 
-phase=backups
-task "Recovery keys" "$run/backups.log" cix-backup --auto --check || {
-  note "Run cix backup to resolve it, then retry." >&2
-  exit 1
-}
-mark_ok "Recovery keys" "verified in 1Password"
-
-if $update; then
-  phase=inputs
-  declare -A before
-  for i in "${inputs[@]}"; do before[$i]=$(lock_rev "$i"); done
-  task "Inputs" "$run/inputs.log" nix flake update "${inputs[@]}"
-  moved=()
-  for i in "${inputs[@]}"; do
-    now=$(lock_rev "$i")
-    [[ $now == "${before[$i]}" ]] || moved+=("$i ${before[$i]} → $now")
-  done
-  if ((${#moved[@]})); then
-    mark_ok "Inputs" "${moved[0]}"
-    for m in "${moved[@]:1}"; do detail "$m"; done
-  else
-    mark_ok "Inputs" "unchanged"
+if [[ $action == rollback ]]; then
+  phase=generations
+  task "Generations" "$run/generations.log" bash -c "$generation_scan"
+  cp "$run/generations.log" "$run/generations"
+  if $list; then
+    show_generations "$run/generations"
+    exit 0
   fi
+  IFS=$'\t' read -r generation out < <(select_generation "$run/generations" "$generation")
+  [[ $out == /nix/store/* && -x $out/bin/switch-to-configuration ]]
+  nix-store --add-root "$run/result" --indirect --realise "$out" > /dev/null
+  mark_ok "Rollback" "generation $generation · $out"
 else
-  mark_ok "Inputs" "kept (--no-update)"
-fi
 
-# Validation and the build both use the same immutable Git-flake snapshot
-phase=checks
-check_all() {
-  nix flake metadata --json --no-update-lock-file . > "$run/source.json"
-  nix flake check "$(jq -er '.path' "$run/source.json")" --no-update-lock-file
-}
-task "Checks" "$run/checks.log" check_all
-source=$(jq -er '.path' "$run/source.json")
-[[ $source == /nix/store/* && -f $source/flake.nix ]]
-mark_ok "Checks" "passed"
-
-phase=build
-# The output link protects the candidate from concurrent garbage collection
-task "Build" "$run/build.log" nix build "$source#nixosConfigurations.$host.config.system.build.toplevel" \
-  --out-link "$run/result" --print-out-paths --no-update-lock-file
-out=$(readlink -e "$run/result")
-[[ $out == /nix/store/* && -x $out/bin/switch-to-configuration ]]
-printf '%s\n' "$out" > "$run/candidate"
-printf '%s\n' "$previous" > "$run/previous"
-mark_ok "Build" "${out#*-nixos-system-}"
-
-phase=smoke-check
-if [[ -x $out/sw/bin/nvidia-smi ]]; then
-  task "NVIDIA" "$run/nvidia-smi.log" "$out/sw/bin/nvidia-smi" --help || {
-    note "nvidia-smi crashes in the new build; nothing was installed." >&2
+  phase=backups
+  task "Recovery keys" "$run/backups.log" cix-backup --auto --check || {
+    note "Run cix backup to resolve it, then retry." >&2
     exit 1
   }
-  mark_ok "NVIDIA" "nvidia-smi starts"
+  mark_ok "Recovery keys" "verified in 1Password"
+
+  if $update; then
+    phase=inputs
+    declare -A before
+    for i in "${inputs[@]}"; do before[$i]=$(lock_rev "$i"); done
+    task "Inputs" "$run/inputs.log" nix flake update "${inputs[@]}"
+    moved=()
+    for i in "${inputs[@]}"; do
+      now=$(lock_rev "$i")
+      [[ $now == "${before[$i]}" ]] || moved+=("$i ${before[$i]} → $now")
+    done
+    if ((${#moved[@]})); then
+      mark_ok "Inputs" "${moved[0]}"
+      for m in "${moved[@]:1}"; do detail "$m"; done
+    else
+      mark_ok "Inputs" "unchanged"
+    fi
+  else
+    mark_ok "Inputs" "kept (--no-update)"
+  fi
+
+  # Validation and the build both use the same immutable Git-flake snapshot
+  phase=checks
+  check_all() {
+    nix flake metadata --json --no-update-lock-file . > "$run/source.json"
+    nix flake check "$(jq -er '.path' "$run/source.json")" --no-update-lock-file
+  }
+  task "Checks" "$run/checks.log" check_all
+  source=$(jq -er '.path' "$run/source.json")
+  [[ $source == /nix/store/* && -f $source/flake.nix ]]
+  mark_ok "Checks" "passed"
+
+  phase=build
+  # The output link protects the candidate from concurrent garbage collection
+  task "Build" "$run/build.log" nix build "$source#nixosConfigurations.$host.config.system.build.toplevel" \
+    --out-link "$run/result" --print-out-paths --no-update-lock-file
+  out=$(readlink -e "$run/result")
+  [[ $out == /nix/store/* && -x $out/bin/switch-to-configuration ]]
+  mark_ok "Build" "${out#*-nixos-system-}"
+
+  phase=smoke-check
+  if [[ -x $out/sw/bin/nvidia-smi ]]; then
+    task "NVIDIA" "$run/nvidia-smi.log" "$out/sw/bin/nvidia-smi" --help || {
+      note "nvidia-smi crashes in the new build; nothing was installed." >&2
+      exit 1
+    }
+    mark_ok "NVIDIA" "nvidia-smi starts"
+  fi
 fi
 
+printf '%s\n' "$out" > "$run/candidate"
+printf '%s\n' "$previous" > "$run/previous"
 phase=changes
 diff_changes() {
   nix store diff-closures "$previous" "$out" > "$run/changes.txt"
@@ -242,13 +332,13 @@ section "Install"
 more=
 ((total > 8)) && more="c all changes"
 ask "Install for the next boot?" "$more" all_changes || {
-  note "Nothing installed. To install this build later: cix update $host --no-update"
+  note "Nothing installed."
   exit 0
 }
 
 # Another deployment tool may have changed the system while this build ran
 if [[ $(readlink -e /nix/var/nix/profiles/system) != "$previous" ||
-      $(readlink -e /run/current-system) != "$current" ]]; then
+$(readlink -e /run/current-system) != "$current" ]]; then
   echo "The running system or boot profile changed during this update. Review again with --no-update." >&2
   exit 1
 fi

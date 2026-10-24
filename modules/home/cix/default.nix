@@ -46,6 +46,7 @@ let
   };
   ui = builtins.readFile ./ui.sh;
   steps = builtins.readFile ./steps.sh;
+  generations = builtins.readFile ./generations.sh;
   # op is left out on purpose: only the setgid wrapper reaches the desktop app
   backup = pkgs.writeShellApplication {
     name = "cix-backup";
@@ -81,7 +82,7 @@ let
       util-linux
     ];
     runtimeEnv.REPO = pveDir;
-    text = steps + builtins.readFile ./update-pve;
+    text = steps + generations + builtins.readFile ./update-pve;
   };
   update = pkgs.writeShellApplication {
     name = "cix-update";
@@ -101,7 +102,15 @@ let
       REPO = cixDir;
       PVE = pveDir;
     };
-    text = steps + builtins.readFile ./update;
+    text = steps + generations + builtins.readFile ./update;
+  };
+  rollback = pkgs.writeShellApplication {
+    name = "cix-rollback";
+    runtimeInputs = [ update ];
+    text = ''
+      export CIX_ACTION=rollback
+      exec cix-update "$@"
+    '';
   };
   repos = import ./repos-package.nix { inherit pkgs; };
 in
@@ -135,6 +144,10 @@ in
     cix.commands.update = {
       description = "Update this machine for its next boot, or the guests on pve";
       package = update;
+    };
+    cix.commands.rollback = {
+      description = "Review and restore retained system generations";
+      package = rollback;
     };
     cix.commands.backup = {
       description = "Back up and verify this host's recovery keys in 1Password";

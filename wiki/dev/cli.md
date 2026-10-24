@@ -1,7 +1,7 @@
 ---
 title: cix CLI
 category: dev
-tags: [cli, cix, update, backup, llm, ocr]
+tags: [cli, cix, update, rollback, backup, llm, ocr]
 updated: 2026-10-24
 ---
 
@@ -20,7 +20,8 @@ cix llm --help
 | Command | Does | Details |
 | --- | --- | --- |
 | `cix update draba` | update inputs, validate and build, prepare the next boot; without a target it lists the targets | [Deployment](../deployment.md#build-and-apply) |
-| `cix update pve` | update, review and deploy every guest on pve, stage by stage; `cix update <guest>` for one | [Deployment](../deployment.md#update-the-guests-on-pve) |
+| `cix update pve` | update every guest stage by stage; name one or more guests to select a subset | [Deployment](../deployment.md#update-the-guests-on-pve) |
+| `cix rollback <target>` | review retained generations, prepare this machine's next boot or activate selected guests; `--list` inspects without changes | [Rolling back](#rolling-back) |
 | `cix backup` | back up and verify the host's recovery keys in 1Password | [Secrets](../security/secrets.md#back-up-the-key-1password) |
 | `cix repos` | mirror every GitHub repository to the share and to GitLab | [Repository backups](#repository-backups) |
 | `cix llm` | status, unload, logs, tps, fetch, ui of the local LLM | [Local LLM](local-llm.md) |
@@ -48,6 +49,12 @@ check the applications and both `systemctl --failed` and
 check passes first, and stops at the first guest that doesn't pass them afterwards; logs
 and the review stay in `~/.local/state/cix/updates`.
 
+`cix update <guest-a> <guest-b> --no-update` uses the same planner for just those guests,
+in registry stage order. The order of names on the command line does not override their stages.
+`cix rollback` reuses that review and sequential activation flow with retained generations instead
+of new builds. It shares the update lock; its logs and temporary GC roots use the same state folder.
+`modules/home/cix/generations.sh` reads system profile links and selects or displays generations.
+
 The command rejects concurrent runs and untracked files, and asks before
 including working-tree edits. Checks and the build use the same immutable
 source snapshot. Recovery-key verification must succeed; run `cix backup`
@@ -68,8 +75,45 @@ menu is complete. The command reports failure and prints exact retry and
 previous-build recovery commands. Retrying still writes the boot menu even
 when the profile already names the candidate.
 
-`modules/home/cix/test-update.py` exercises the workflow with fake Nix and sudo
-commands in temporary directories; `nix flake check` runs it automatically.
+`modules/home/cix/test-update.py` and `test-update-pve.py` exercise updates and rollbacks with
+fake Nix, sudo and SSH commands in temporary directories; `nix flake check` runs them automatically.
+
+## Rolling back
+
+```sh
+cix rollback draba --list
+cix rollback draba                  # prepare an older build for the next boot
+cix rollback <guest> --list
+cix rollback <guest>                # activate an older build, then verify health
+cix rollback <guest> --generation 12 # select one retained generation explicitly
+cix rollback <guest-a> <guest-b> --dry-run
+```
+
+The default selects the highest retained generation below the current system profile with a
+different closure. `--list` displays the retained generation numbers and exact paths without
+copying or activating anything; `--generation` requires one named target. An older generation is
+not necessarily healthy, particularly after an automatic recovery: review it or select explicitly.
+Missing or collected generations stop the operation before any guest is changed.
+
+On the workstation, rollback reviews the package changes and asks before preparing the next boot.
+The running desktop is left alone, including its current GPU specialisation; reboot yourself and
+select the same specialisation. A candidate missing that specialisation is refused.
+
+For guests, it reuses the update planner, stage order, review, activation and health checks.
+Retained closures are inspected and activated on their guests, where system generations already
+protect them from garbage collection. No closure import or local trust change is needed.
+`--dry-run` does not write to the guests. The registry must still
+evaluate, but rollback never updates inputs, builds a configuration or edits the working tree.
+Existing failed units can be repaired by rollback; failing checks require acknowledgement and
+must recover afterwards. Each guest must pass before the next starts. The registry's automatic
+rollback policy also applies to a failed manual rollback, returning that guest to its starting build.
+Guests already changed earlier in the run remain changed; this is not an atomic group operation.
+
+Rollback changes system generations, not application data, database migrations, Git files, image
+pins or live dotfiles. Old container images may need downloading by their services during activation;
+the current source's image pins are not pulled for a rollback. Logs retain the starting closures
+and print an exact recovery command on failure. `cix rollback pve` selects all guests and still asks
+after showing each destination; the Proxmox host itself is never rolled back.
 
 ## Repository backups
 

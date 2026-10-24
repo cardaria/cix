@@ -94,7 +94,7 @@ cix/
 │   ├── nixos/        shared system modules
 │   └── home/         Home Manager modules
 │       ├── apps/     applications, including ChatGPT desktop
-│       ├── cix/      the cix command and cix update
+│       ├── cix/      the cix command, updates and rollbacks
 │       ├── llm/      local LLM: NInfer, llama-swap, OpenCode
 │       ├── ocr/      Chandra OCR 2, cix ocr
 │       └── wayland/  Plasma settings, fonts
@@ -116,6 +116,8 @@ The first updates draba: the inputs, checks, builds and asks before preparing th
 second updates every guest on pve after one review, stage by stage with health checks
 ([Deployment](wiki/deployment.md#update-the-guests-on-pve)). Plain `cix update` lists the
 targets and changes nothing. `cix --help` lists the other commands ([cix CLI](wiki/dev/cli.md)).
+Name several guests to update a subset with the same plan. `cix rollback <target>` reviews an older
+generation before preparing the next boot or restoring a guest; `--list` only lists generations.
 
 > [!TIP]
 > Changes under `dotfiles/` apply on the application's reload, without a rebuild.

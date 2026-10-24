@@ -17,8 +17,9 @@ Live dotfiles skip most of it.
 3. [Live dotfiles](#live-dotfiles)
 4. [Update packages](#update-packages)
 5. [Update the guests on pve](#update-the-guests-on-pve)
-6. [Save to GitHub](#save-to-github)
-7. [Troubleshooting](#troubleshooting)
+6. [Roll back a system](#roll-back-a-system)
+7. [Save to GitHub](#save-to-github)
+8. [Troubleshooting](#troubleshooting)
 
 ## Add or remove an application
 
@@ -181,10 +182,16 @@ Commit the lock on its own: `chore(flake): update nixpkgs and home-manager`.
 ```sh
 cix update pve       # every guest
 cix update <guest>   # one guest
+cix update <guest-a> <guest-b> --no-update
 ```
 
 Runs from `draba` against the private pve repo (`~/Repos/pve`), which declares the guests and their
 registry: machines, services, health checks and update settings. A new guest needs no change here.
+Several guest names select a subset of the same plan: one build snapshot, review and approval,
+all downloads before activation, and the same stage order regardless of argument order. Repeated
+names are deduplicated; unknown names and mixing `pve` or this machine with other targets are refused
+before updates begin. Stages do not infer dependencies between configuration changes; use separate
+commands when a rollout needs a different order.
 In order:
 
 1. **Health first.** No target may have a failed unit, or it stops. A health check that already fails is
@@ -213,6 +220,12 @@ The inputs are shared: `cix update <guest>` moves them for every guest, and the 
 their next deploy. A guest whose containers are `self-managed` is only reported. At the end it lists
 the files the update changed in the pve repo (`flake.lock` and the files with moved image pins) and offers to
 commit exactly those, as `chore(flake): update the guests on pve`; it never pushes.
+
+## Roll back a system
+
+`cix rollback <target>` reviews retained generations before preparing this machine for its next boot
+or activating selected guests. Use `--list` to inspect first and `--generation` to choose explicitly.
+See [rollback options and limits](dev/cli.md#rolling-back).
 
 ## Save to GitHub
 

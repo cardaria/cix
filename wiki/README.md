@@ -2,7 +2,7 @@
 title: Wiki home
 category: overview
 tags: [index, moc]
-updated: 2026-10-13
+updated: 2026-10-24
 ---
 
 # cix wiki
@@ -57,7 +57,7 @@ configured.
 
 | Page | Content |
 | --- | --- |
-| [cix CLI](dev/cli.md) | `cix update`, `cix llm`, `cix ocr` and how to add a command |
+| [cix CLI](dev/cli.md) | `cix update`, `cix rollback`, `cix llm`, `cix ocr` and how to add a command |
 | [Developer tools](dev/tools.md) | Zed, Micro, Lazygit, nixd/nixfmt, AI CLIs, nvtop |
 | [Local LLM](dev/local-llm.md) | Qwen3.8-27B on the 5090: NInfer, llama-swap, OpenCode profiles, `~/AI` |
 | [Local OCR](dev/local-ocr.md) | Chandra OCR 2 on the 5090: PDFs, images, verified weights in `~/AI` |

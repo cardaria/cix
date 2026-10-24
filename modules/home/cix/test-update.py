@@ -33,13 +33,17 @@ elif name == 'cix-backup':
 elif name == 'sudo' and args == ['-v']:
     pass
 elif name == 'sudo':
-    assert args == ['nixos-rebuild', 'boot', '--store-path', str(root / 'store/candidate'), '--no-reexec'], args
+    assert args[:3] == ['nixos-rebuild', 'boot', '--store-path'] and args[4:] == ['--no-reexec'], args
+    assert args[3] in [str(root / 'store' / n) for n in ('candidate', 'older', 'previous')], args
     if fail != 'profile':
         (root / 'profile').unlink()
-        (root / 'profile').symlink_to(root / 'store/candidate')
+        (root / 'profile').symlink_to(args[3])
     if fail in ('boot', 'interrupt'):
         print('simulated boot installation failure')
         sys.exit(130 if fail == 'interrupt' else 4)
+elif name == 'nix-store':
+    assert args[:1] == ['--add-root'], args
+    p(args[1]).symlink_to(args[-1])
 elif name == 'nix':
     action = ' '.join(args[:2])
     if fail == {'flake update':'inputs', 'flake metadata':'snapshot', 'flake check':'checks', 'store diff-closures':'changes'}.get(action):
@@ -91,7 +95,7 @@ class Update(unittest.TestCase):
         (self.repo / 'flake.lock').write_text('{}\n')
         self.git('add', 'flake.nix', 'flake.lock')
         self.git('-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'fixture')
-        for name in ('candidate', 'previous', 'other', 'source', 'previous-display-5090'):
+        for name in ('candidate', 'previous', 'older', 'other', 'source', 'previous-display-5090'):
             target = self.root / 'store' / name
             (target / 'bin').mkdir(parents=True)
             (target / 'flake.nix').write_text('{}\n')
@@ -105,9 +109,9 @@ class Update(unittest.TestCase):
         mock = bindir / 'mock'
         mock.write_text(f'#!{sys.executable}\n' + MOCK)
         mock.chmod(0o755)
-        for name in ('nix', 'sudo', 'hostname', 'cix-backup', 'cix-update-pve'):
+        for name in ('nix', 'nix-store', 'sudo', 'hostname', 'cix-backup', 'cix-update-pve'):
             (bindir / name).symlink_to(mock)
-        script = (SOURCE / 'steps.sh').read_text() + (SOURCE / 'update').read_text()
+        script = (SOURCE / 'steps.sh').read_text() + (SOURCE / 'generations.sh').read_text() + (SOURCE / 'update').read_text()
         script = script.replace('/nix/var/nix/profiles/system', str(self.root / 'profile'))
         script = script.replace('/run/current-system', str(self.root / 'current'))
         script = script.replace('/nix/store/', str(self.root / 'store') + '/')
@@ -236,6 +240,90 @@ class Update(unittest.TestCase):
     def test_two_targets_are_refused(self):
         self.assertNotEqual(self.run_update('gamma'), 0)
         self.changed_nothing()
+
+    def test_multiple_guests_are_forwarded_once_and_deduplicated(self):
+        self.assertEqual(self.run_update('edge', 'gamma', '--no-update', target='gamma'), 0, self.output)
+        self.assertEqual(self.side_effects(), [['cix-update-pve', 'gamma', 'edge', '--no-update']])
+
+    def test_mixed_and_unknown_targets_never_dispatch(self):
+        for target, args in [('pve', ('gamma',)), ('gamma', ('draba',)), ('gamma', ('missing',))]:
+            with self.subTest(target=target):
+                (self.root / 'calls').write_text('')
+                self.assertNotEqual(self.run_update(*args, target=target), 0)
+                self.assertEqual(self.side_effects(), [])
+
+    def rollback(self, *args, **kwargs):
+        self.env['CIX_ACTION'] = 'rollback'
+        return self.run_update(*args, **kwargs)
+
+    def generations(self):
+        for n, name in [(1, 'older'), (2, 'previous')]:
+            (self.root / f'profile-{n}-link').symlink_to(self.root / 'store' / name)
+        (self.root / 'profile').unlink()
+        (self.root / 'profile').symlink_to(self.root / 'profile-2-link')
+
+    def test_rollback_prepares_only_the_next_boot(self):
+        self.generations()
+        self.assertEqual(self.rollback(), 0, self.output)
+        self.assertEqual((self.root / 'profile').resolve(), self.root / 'store/older')
+        self.assertEqual((self.root / 'current').resolve(), self.root / 'store/previous')
+        self.assertFalse(any(c[0] in ('cix-backup', 'nix') and c[1:3] != ['store', 'diff-closures'] for c in self.side_effects()))
+
+    def test_rollback_listing_is_read_only(self):
+        self.generations()
+        self.assertEqual(self.rollback('--list'), 0, self.output)
+        self.assertIn('generation 1', self.output)
+        self.assertIn('current profile', self.output)
+        self.no_boot()
+        self.assertEqual(self.side_effects(), [])
+
+    def test_rollback_undoes_a_pending_boot_without_touching_the_running_system(self):
+        self.generations()
+        (self.root / 'profile-3-link').symlink_to(self.root / 'store/candidate')
+        (self.root / 'profile').unlink()
+        (self.root / 'profile').symlink_to(self.root / 'profile-3-link')
+        self.assertEqual(self.rollback(), 0, self.output)
+        self.assertEqual((self.root / 'profile').resolve(), self.root / 'store/previous')
+        self.assertEqual((self.root / 'current').resolve(), self.root / 'store/previous')
+
+    def test_rollback_skips_duplicate_closures(self):
+        self.generations()
+        (self.root / 'profile-3-link').symlink_to(self.root / 'store/previous')
+        (self.root / 'profile').unlink()
+        (self.root / 'profile').symlink_to(self.root / 'profile-3-link')
+        self.assertEqual(self.rollback('--dry-run'), 0, self.output)
+        self.assertIn('generation 1', self.output)
+
+    def test_verbose_rollback_listing(self):
+        self.generations()
+        self.assertEqual(self.rollback('--list', '--verbose'), 0, self.output)
+        self.no_boot()
+
+    def test_rollback_dry_run_and_decline(self):
+        self.generations()
+        self.assertEqual(self.rollback('--dry-run'), 0, self.output)
+        self.no_boot()
+        self.assertEqual(self.rollback(reply='n\n'), 0, self.output)
+        self.no_boot()
+
+    def test_rollback_missing_generation_and_bad_options(self):
+        self.generations()
+        for args in [('--generation', '99'), ('--generation', 'bad'), ('--generation',), ('--no-update',), ('--cuda',)]:
+            with self.subTest(args=args):
+                self.assertNotEqual(self.rollback(*args), 0, self.output)
+                self.no_boot()
+
+    def test_rollback_preserves_specialisation_safety(self):
+        self.generations()
+        (self.root / 'current').unlink()
+        (self.root / 'current').symlink_to(self.root / 'store/previous-display-5090')
+        self.assertNotEqual(self.rollback(), 0)
+        self.assertIn('missing your display-5090', self.output)
+        self.no_boot()
+
+    def test_guest_rollback_is_dispatched(self):
+        self.assertEqual(self.rollback('--generation', '4', target='gamma'), 0, self.output)
+        self.assertEqual(self.side_effects(), [['cix-update-pve', 'gamma', '--generation', '4']])
 
     def test_decline(self):
         self.assertEqual(self.run_update(reply='n\n'), 0, self.output)

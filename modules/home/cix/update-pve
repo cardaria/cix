@@ -1,42 +1,86 @@
 #!/usr/bin/env bash
-# cix update pve | <guest>, started by cix update: review, then deploy the guests of the pve repo stage by stage
+# Updates and rollbacks share the registry's planner, review and sequential deployment
 set -euo pipefail
 
-target=$1
-shift
+action=${CIX_ACTION:-update}
+[[ $action == update || $action == rollback ]] || exit 1
+requested=()
 inputs=(nixpkgs-stable nixpkgs-pve)
 dry=false
 update=true
 images=true
-for arg in "$@"; do
-  case $arg in
-    -n | --dry-run) dry=true ;;
-    --no-update) update=false ;;
-    --no-images) images=false ;;
-    -v | --verbose) ui_verbose=true ;;
-    *)
-      echo "cix update $target: unknown option '$arg'. Run cix update --help." >&2
+list=false
+generation=
+while (($#)); do
+  arg=$1
+  shift
+  if [[ $action == rollback && $arg == --generation ]]; then
+    [[ ${1:-} =~ ^[1-9][0-9]*$ ]] || {
+      echo "--generation needs a positive number" >&2
       exit 1
-      ;;
+    }
+    generation=$1
+    shift
+    continue
+  fi
+  case $arg in
+  -n | --dry-run) dry=true ;;
+  --no-update)
+    [[ $action == update ]] || exit 1
+    update=false
+    ;;
+  --no-images)
+    [[ $action == update ]] || exit 1
+    images=false
+    ;;
+  --list)
+    [[ $action == rollback ]] || exit 1
+    list=true
+    ;;
+  -v | --verbose) ui_verbose=true ;;
+  -*)
+    echo "cix $action: unknown option '$arg'. Run cix $action --help." >&2
+    exit 1
+    ;;
+  *)
+    for existing in "${requested[@]}"; do
+      [[ $arg != "$existing" ]] || continue 2
+    done
+    requested+=("$arg")
+    ;;
   esac
 done
+target=${requested[*]}
+if ((${#requested[@]} == 0)) || { ((${#requested[@]} > 1)) && [[ " $target " == *" pve "* ]]; }; then
+  echo "Name pve alone, or one or more guests." >&2
+  exit 1
+fi
+if [[ -n $generation ]] && { ((${#requested[@]} != 1)) || [[ $target == pve ]]; }; then
+  echo "--generation requires one named guest." >&2
+  exit 1
+fi
 
 cd "$REPO"
 umask 077
 # One update of the pve repo at a time
 exec 9> "$(git rev-parse --git-common-dir)/cix-update.lock"
-flock -n 9 || { echo "Another cix update is running" >&2; exit 1; }
-
-untracked=$(git ls-files --others --exclude-standard)
-if [[ -n $untracked ]]; then
-  printf 'Git flakes exclude untracked files. Review and stage intended files first:\n%s\n' "$untracked" >&2
+flock -n 9 || {
+  echo "Another cix update or rollback is running" >&2
   exit 1
-fi
-changes=$(git status --short)
-if [[ -n $changes ]]; then
-  section "Uncommitted changes in the pve repo"
-  while IFS= read -r line; do printf '  %s\n' "$line"; done <<< "$changes"
-  ask "Build with these changes?" || exit 1
+}
+
+if [[ $action == update ]]; then
+  untracked=$(git ls-files --others --exclude-standard)
+  if [[ -n $untracked ]]; then
+    printf 'Git flakes exclude untracked files. Review and stage intended files first:\n%s\n' "$untracked" >&2
+    exit 1
+  fi
+  changes=$(git status --short)
+  if [[ -n $changes ]]; then
+    section "Uncommitted changes in the pve repo"
+    while IFS= read -r line; do printf '  %s\n' "$line"; done <<< "$changes"
+    ask "Build with these changes?" || exit 1
+  fi
 fi
 
 state=${XDG_STATE_HOME:-$HOME/.local/state}/cix/updates
@@ -56,7 +100,7 @@ finish() {
       note "$guest may run the new build. Return it to the one it ran before with:" >&2
       printf '    nixos-rebuild switch --store-path %q --target-host root@%s --no-reexec\n' "$previous" "$address" >&2
     fi
-    if [[ $phase != plan && $phase != preflight ]]; then
+    if [[ $action == update && $phase != plan && $phase != preflight ]]; then
       note "flake.lock and the image pins may have changed; review with git diff, retry with --no-update" >&2
     fi
     note "Log  ${run/#$HOME/\~}" >&2
@@ -99,9 +143,17 @@ plan='cs:
   }'
 
 load_plan() {
+  local g
   nix eval --json --option warn-dirty false "$1#nixosConfigurations" --apply "$plan" > "$run/registry.json"
-  jq --arg t "$target" '.guests |= (map(select($t == "pve" or .name == $t)) | sort_by(.stage, .name))' \
-    "$run/registry.json" > "$run/plan.json"
+  for g in "${requested[@]}"; do
+    [[ $g == pve ]] || jq -e --arg g "$g" '.guests | any(.name == $g)' "$run/registry.json" > /dev/null || {
+      echo "Unknown guest: $g" >&2
+      return 1
+    }
+  done
+  jq -n --slurpfile registry "$run/registry.json" --args \
+    '$registry[0] | .guests |= (map(select(.name as $n | ($ARGS.positional | index("pve") != null or index($n) != null))) | sort_by(.stage, .name))' \
+    "${requested[@]}" > "$run/plan.json"
   jq -e '.guests | length > 0' "$run/plan.json" > /dev/null
 }
 
@@ -114,26 +166,34 @@ field() {
   jq -r --arg g "$1" ".guests[] | select(.name == \$g) | .$2" "$run/plan.json"
 }
 
+candidate() {
+  if [[ $action == rollback ]]; then
+    cat "$run/$1.destination"
+  else
+    readlink -e "$run/$1"
+  fi
+}
+
 # --- Health: the registry's checks, the same the status page runs, plus no failed units ---
 
 probe() {
   local kind=$1 target=$2 query=$3 expect=$4 code
   case $kind in
-    proxy | http)
-      code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "$target" 2> /dev/null || true)
-      [[ $code =~ ^[0-9]+$ ]] || return 1
-      if [[ $kind == proxy ]]; then
-        ((10#$code > 0 && 10#$code < 500))
-      else
-        [[ $code == "$expect" ]]
-      fi
-      ;;
-    dns) [[ $(dig +short +time=3 +tries=2 "@$target" "$query" A 2> /dev/null) == "$expect" ]] ;;
-    tcp)
-      # shellcheck disable=SC2016
-      timeout 5 "$BASH" -c 'exec 3<> "/dev/tcp/$1/$2"' _ "${target%:*}" "${target##*:}" 2> /dev/null
-      ;;
-    *) return 1 ;;
+  proxy | http)
+    code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "$target" 2> /dev/null || true)
+    [[ $code =~ ^[0-9]+$ ]] || return 1
+    if [[ $kind == proxy ]]; then
+      ((10#$code > 0 && 10#$code < 500))
+    else
+      [[ $code == "$expect" ]]
+    fi
+    ;;
+  dns) [[ $(dig +short +time=3 +tries=2 "@$target" "$query" A 2> /dev/null) == "$expect" ]] ;;
+  tcp)
+    # shellcheck disable=SC2016
+    timeout 5 "$BASH" -c 'exec 3<> "/dev/tcp/$1/$2"' _ "${target%:*}" "${target##*:}" 2> /dev/null
+    ;;
+  *) return 1 ;;
   esac
 }
 
@@ -220,10 +280,16 @@ bump() {
   name=${ref%:*}
   old=${image#*@}
   new=$(skopeo inspect --retry-times 2 --raw "docker://$ref" | skopeo manifest-digest /dev/stdin)
-  [[ $new =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "No digest for $ref" >&2; return 1; }
+  [[ $new =~ ^sha256:[0-9a-f]{64}$ ]] || {
+    echo "No digest for $ref" >&2
+    return 1
+  }
   [[ $new == "$old" ]] && return 0
   count=$(git grep -cF -- "$image" | awk -F: '{ n += $NF } END { print n + 0 }')
-  [[ $count == 1 ]] || { echo "The pin $image appears $count times in the repo; expected once" >&2; return 1; }
+  [[ $count == 1 ]] || {
+    echo "The pin $image appears $count times in the repo; expected once" >&2
+    return 1
+  }
   file=$(git grep -lF -- "$image")
   content=$(< "$file")
   printf '%s\n' "${content//"$image"/"$ref@$new"}" > "$file"
@@ -262,13 +328,43 @@ host_report() {
 
 preflight() {
   local g units
+  : > "$run/failed-units"
   for g in "${targets[@]}"; do
-    units=$(failed_units "$(field "$g" address)") || { echo "$g does not answer over SSH"; return 1; }
-    [[ -z $units ]] || { printf 'Failed units on %s; fix them first:\n%s\n' "$g" "$units"; return 1; }
+    units=$(failed_units "$(field "$g" address)") || {
+      echo "$g does not answer over SSH"
+      return 1
+    }
+    if [[ -n $units ]]; then
+      printf 'Failed units on %s:\n%s\n' "$g" "$units"
+      [[ $action == rollback ]] || {
+        echo "Fix them first."
+        return 1
+      }
+      printf '%s\n' "$g" >> "$run/failed-units"
+    fi
   done
   # A failing check is reported, not decided here: a service this very update adds fails until it is deployed
   : > "$run/baseline"
   failing_checks > "$run/baseline"
+}
+
+prepare_rollbacks() {
+  local g address number path
+  for g in "${targets[@]}"; do
+    address=$(field "$g" address)
+    remote "$address" "$generation_scan" > "$run/$g.generations" || return 1
+    if $list; then
+      section "$g"
+      show_generations "$run/$g.generations"
+      continue
+    fi
+    IFS=$'\t' read -r number path < <(select_generation "$run/$g.generations" "$generation") || return 1
+    [[ $path == /nix/store/* ]] || return 1
+    printf '%s\n' "$number" > "$run/$g.generation"
+    remote "$address" readlink -f /run/current-system > "$run/$g.before" || return 1
+    printf '%s\n' "$path" > "$run/$g.destination"
+    remote "$address" command -v nixos-rebuild > /dev/null || return 1
+  done
 }
 
 bump_all() {
@@ -300,8 +396,12 @@ compare_all() {
   local g address new current
   for g in "${targets[@]}"; do
     address=$(field "$g" address)
-    new=$(readlink -e "$run/$g")
-    current=$(remote "$address" readlink -f /run/current-system)
+    new=$(candidate "$g")
+    current=$(remote "$address" readlink -f /run/current-system) || return 1
+    if [[ $action == rollback && $current != "$(< "$run/$g.before")" ]]; then
+      echo "$g changed while preparing the rollback; review again." >&2
+      return 1
+    fi
     printf '%s\n' "$current" > "$run/$g.previous"
     awk -F '\t' -v g="$g" '$1 == g { print $2 "\t" $3 "\t" $4 }' "$run/images.tsv" > "$run/$g.images"
     : > "$run/$g.changes"
@@ -310,11 +410,15 @@ compare_all() {
       continue
     fi
     echo changed > "$run/$g.state"
-    remote "$address" nix-store -qR "$current" > "$run/$g.old"
-    nix-store -qR "$new" > "$run/$g.new"
+    remote "$address" nix-store -qR "$current" > "$run/$g.old" || return 1
+    if [[ $action == rollback ]]; then
+      remote "$address" nix-store -qR "$new" > "$run/$g.new" || return 1
+    else
+      nix-store -qR "$new" > "$run/$g.new" || return 1
+    fi
     gawk "$versions" "$run/$g.old" "$run/$g.new" | LC_ALL=C sort > "$run/$g.changes"
   done
-  if [[ $target == pve ]]; then
+  if [[ $action == update && $target == pve ]]; then
     host_report
   fi
 }
@@ -354,7 +458,11 @@ download_all() {
       copy_progress "$log" "$sizes" "$started" "$prefix" > "$ui_status"
       sleep 0.4
     done
-    wait "$copy_pid" || { tail -n 12 "$log"; return 1; }
+    wait "$copy_pid" || {
+      tail -n 12 "$log"
+      return 1
+    }
+    [[ $action == update ]] || continue
     mapfile -t refs < <(jq -r --arg g "$g" '.guests[] | select(.name == $g) | .images[].image' "$run/plan.json")
     for image in "${refs[@]}"; do
       [[ -n $image ]] || continue
@@ -365,10 +473,33 @@ download_all() {
   done
 }
 
+# Refuse a stale review before attempting any activation or automatic recovery
+unchanged() {
+  local g=$1 address=$2
+  [[ $(remote "$address" readlink -f /run/current-system) == "$(< "$run/$g.previous")" ]] || {
+    echo "$g changed since the review; nothing further was deployed."
+    return 1
+  }
+  if [[ $action == rollback ]]; then
+    [[ $(remote "$address" readlink -f /nix/var/nix/profiles/system) == "$(awk -F '\t' '$1 == "current" { print $3 }' "$run/$g.generations")" ]] || {
+      echo "$g's system profile changed since the review."
+      return 1
+    }
+    [[ $(remote "$address" readlink -e "/nix/var/nix/profiles/system-$(< "$run/$g.generation")-link") == "$(candidate "$g")" ]] || {
+      echo "$g's selected generation is no longer available."
+      return 1
+    }
+  fi
+}
+
 # Switches one guest, then waits for every check and no failed units
 deploy_one() {
   local g=$1 address=$2 new=$3
-  nixos-rebuild switch --store-path "$new" --target-host "root@$address" --no-reexec
+  if [[ $action == rollback ]]; then
+    remote "$address" nixos-rebuild switch --store-path "$new" --no-reexec || return 1
+  else
+    nixos-rebuild switch --store-path "$new" --target-host "root@$address" --no-reexec || return 1
+  fi
   [[ $(remote "$address" readlink -f /run/current-system) == "$new" ]] || {
     echo "$g does not run the new build"
     return 1
@@ -377,9 +508,7 @@ deploy_one() {
 }
 
 rollback_one() {
-  local g=$1 address=$2 previous=$3
-  nixos-rebuild switch --store-path "$previous" --target-host "root@$address" --no-reexec
-  healthy "$(field "$g" settle)" "$address"
+  deploy_one "$@"
 }
 
 # --- Review ---
@@ -403,6 +532,10 @@ review_guest() {
   title="$g · stage $(field "$g" stage)"
   [[ $(field "$g" autoRollback) == true ]] && title+=" · rolls back by itself"
   section "$title"
+  if [[ $action == rollback ]]; then
+    note "Rollback to generation $(< "$run/$g.generation")"
+    note "$(candidate "$g")"
+  fi
   if [[ $(field "$g" containers) == self-managed ]]; then
     note "Its containers are updated by the app's own installer, not cix"
   fi
@@ -438,70 +571,91 @@ count_guests() {
 phase=plan
 load_plan "$REPO"
 mapfile -t targets < <(guests)
-section "cix update $target"
+section "cix $action $target"
+
+if [[ $action == rollback ]] && $list; then
+  prepare_rollbacks
+  exit 0
+fi
 
 phase=preflight
 task "Health" "$run/health.log" preflight
-if [[ -s $run/baseline ]]; then
+if [[ -s $run/baseline || -s $run/failed-units ]]; then
   mark_fail "Health" "$(wc -l < "$run/baseline") checks already fail, before anything is changed"
   while IFS= read -r name; do item "$name" "fails now"; done < "$run/baseline"
-  note "A service this update adds fails until its guest is deployed. A real outage is not fixed by an update."
+  while IFS= read -r name; do item "$name" "has failed units"; done < "$run/failed-units"
+  if [[ $action == rollback ]]; then
+    note "These checks must recover after rollback; they will not be ignored."
+  else
+    note "A service this update adds fails until its guest is deployed. A real outage is not fixed by an update."
+  fi
   ask "Continue anyway?" || exit 1
-  mark_ok "Health" "no failed units; those checks are not held against this update"
+  if [[ $action == rollback ]]; then
+    : > "$run/baseline"
+    mark_ok "Health" "baseline recorded; every check is required after rollback"
+  else
+    mark_ok "Health" "no failed units; those checks are not held against this update"
+  fi
 else
   mark_ok "Health" "$(count_guests "${#targets[@]}"), every check passes"
 fi
 
 : > "$run/images.tsv"
-if $update; then
-  phase=inputs
-  declare -A before
-  for i in "${inputs[@]}"; do before[$i]=$(lock_rev "$i"); done
-  task "Inputs" "$run/inputs.log" nix flake update "${inputs[@]}"
-  moved=()
-  for i in "${inputs[@]}"; do
-    now=$(lock_rev "$i")
-    [[ $now == "${before[$i]}" ]] || moved+=("$i ${before[$i]} → $now")
-  done
-  if ((${#moved[@]})); then
-    mark_ok "Inputs" "${moved[0]}"
-    for m in "${moved[@]:1}"; do detail "$m"; done
-  else
-    mark_ok "Inputs" "unchanged"
-  fi
-  [[ $target == pve ]] || detail "The inputs are shared: the other guests take them at their next deploy."
-
-  if $images; then
-    phase=images
-    task "Images" "$run/images.log" bump_all
-    newer=$(wc -l < "$run/images.tsv")
-    if ((newer)); then
-      mark_ok "Images" "$newer newer"
+if [[ $action == rollback ]]; then
+  phase=generations
+  task "Generations" "$run/generations.log" prepare_rollbacks
+  mark_ok "Generations" "$(count_guests "${#targets[@]}"), retained on their guests"
+else
+  if $update; then
+    phase=inputs
+    declare -A before
+    for i in "${inputs[@]}"; do before[$i]=$(lock_rev "$i"); done
+    task "Inputs" "$run/inputs.log" nix flake update "${inputs[@]}"
+    moved=()
+    for i in "${inputs[@]}"; do
+      now=$(lock_rev "$i")
+      [[ $now == "${before[$i]}" ]] || moved+=("$i ${before[$i]} → $now")
+    done
+    if ((${#moved[@]})); then
+      mark_ok "Inputs" "${moved[0]}"
+      for m in "${moved[@]:1}"; do detail "$m"; done
     else
-      mark_ok "Images" "all current"
+      mark_ok "Inputs" "unchanged"
+    fi
+    [[ $target == pve ]] || detail "The inputs are shared: the other guests take them at their next deploy."
+
+    if $images; then
+      phase=images
+      task "Images" "$run/images.log" bump_all
+      newer=$(wc -l < "$run/images.tsv")
+      if ((newer)); then
+        mark_ok "Images" "$newer newer"
+      else
+        mark_ok "Images" "all current"
+      fi
+    else
+      mark_ok "Images" "kept (--no-images)"
     fi
   else
-    mark_ok "Images" "kept (--no-images)"
+    mark_ok "Inputs" "kept (--no-update)"
   fi
-else
-  mark_ok "Inputs" "kept (--no-update)"
+
+  # Checks, builds and the deploy all use this one snapshot of the tree
+  phase=checks
+  check_all() {
+    snapshot
+    nix flake check "$(jq -er '.path' "$run/source.json")" --no-update-lock-file
+  }
+  task "Checks" "$run/checks.log" check_all
+  source=$(jq -er '.path' "$run/source.json")
+  [[ $source == /nix/store/* && -f $source/flake.nix ]]
+  load_plan "$source"
+  mark_ok "Checks" "passed"
+
+  phase=build
+  task "Build" "$run/build.log" build_all
+  mark_ok "Build" "$(count_guests "${#targets[@]}")"
 fi
-
-# Checks, builds and the deploy all use this one snapshot of the tree
-phase=checks
-check_all() {
-  snapshot
-  nix flake check "$(jq -er '.path' "$run/source.json")" --no-update-lock-file
-}
-task "Checks" "$run/checks.log" check_all
-source=$(jq -er '.path' "$run/source.json")
-[[ $source == /nix/store/* && -f $source/flake.nix ]]
-load_plan "$source"
-mark_ok "Checks" "passed"
-
-phase=build
-task "Build" "$run/build.log" build_all
-mark_ok "Build" "$(count_guests "${#targets[@]}")"
 
 phase=review
 task "Compare" "$run/compare.log" compare_all
@@ -532,30 +686,43 @@ if $dry; then
   exit 0
 fi
 
-section "Deploy"
+if [[ $action == update ]]; then
+  section "Deploy"
+  question="Deploy to"
+else
+  section "Rollback"
+  question="Roll back"
+fi
 note "Order: $(printf '%s → ' "${changed[@]}" | sed 's/ → $//'). Each passes its checks before the next starts."
-ask "Deploy to $(count_guests "${#changed[@]}")?" "c all changes" all_changes || {
-  note "Nothing was deployed. To deploy this review later: cix update $target --no-update"
+ask "$question $(count_guests "${#changed[@]}")?" "c all changes" all_changes || {
+  note "Nothing was deployed."
   exit 0
 }
 
 # Everything lands on the guests while their DNS still works
-phase=download
-ui_status=$run/download.status
-task "Download" "$run/download.log" download_all
-ui_status=
-mark_ok "Download" "$(count_guests "${#changed[@]}") ready"
+if [[ $action == update ]]; then
+  phase=download
+  ui_status=$run/download.status
+  task "Download" "$run/download.log" download_all
+  ui_status=
+  mark_ok "Download" "$(count_guests "${#changed[@]}") ready"
+fi
 
 phase=deploy
 for g in "${changed[@]}"; do
   guest=$g
   address=$(field "$g" address)
+  task "Review $g" "$run/review-$g.log" unchanged "$g" "$address"
   previous=$(< "$run/$g.previous")
-  new=$(readlink -e "$run/$g")
+  new=$(candidate "$g")
   if task "$g" "$run/deploy-$g.log" deploy_one "$g" "$address" "$new"; then
-    rm -- "$run/$g"
+    [[ $action == rollback ]] || rm -- "$run/$g"
     previous=
-    mark_ok "$g" "deployed · checks pass"
+    if [[ $action == update ]]; then
+      mark_ok "$g" "deployed · checks pass"
+    else
+      mark_ok "$g" "rolled back · checks pass"
+    fi
     continue
   fi
   if [[ $(field "$g" autoRollback) == true ]]; then
@@ -564,7 +731,8 @@ for g in "${changed[@]}"; do
     if task "$g" "$run/rollback-$g.log" rollback_one "$g" "$address" "$back"; then
       mark_ok "$g" "back on its previous build and healthy"
     else
-      mark_fail "$g" "back on its previous build but still unhealthy"
+      previous=$back
+      mark_fail "$g" "automatic recovery failed; inspect its log before continuing"
     fi
   fi
   exit 1
@@ -572,13 +740,21 @@ done
 
 phase=complete
 section "Done"
-mark_ok "Guests" "${#changed[@]} updated, every check passes"
+if [[ $action == update ]]; then
+  mark_ok "Guests" "${#changed[@]} updated, every check passes"
+else
+  mark_ok "Guests" "${#changed[@]} rolled back, every check passes"
+fi
+[[ $action == update ]] || exit 0
 
 # What the update changed in the repo: the lock file, and the files holding the moved image pins
 recorded=()
 while IFS= read -r file; do
   [[ -z $(git status --short -- "$file") ]] || recorded+=("$file")
-done < <({ echo flake.lock; git diff --name-only | while IFS= read -r f; do git diff -U0 -- "$f" | grep -q '^[-+].*@sha256:' && echo "$f"; done; } | sort -u)
+done < <({
+  echo flake.lock
+  git diff --name-only | while IFS= read -r f; do git diff -U0 -- "$f" | grep -q '^[-+].*@sha256:' && echo "$f"; done
+} | sort -u)
 if ((${#recorded[@]} == 0)); then
   note "Nothing to commit in ${REPO/#$HOME/\~}"
   exit 0
