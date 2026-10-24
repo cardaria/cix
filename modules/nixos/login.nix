@@ -11,25 +11,39 @@ let
 
   # Plasma records the chosen wallpaper in this file
   desktopConfig = "${home}/.config/plasma-org.kde.plasma.desktop-appletsrc";
-  greeterDir = "/var/lib/plasmalogin";
-
-  # The greeter reads its settings here, not from its home directory
-  greeterConfig = "/etc/plasmalogin.conf";
 in
 {
   # Unlocks KWallet through the login PAM stack; Plasma (Wayland) is the default session
   services.displayManager.plasma-login-manager.enable = true;
 
+  # The native INI generator escapes KConfig's nested section brackets
+  environment.etc."plasmalogin.conf".text = ''
+    [Greeter][Wallpaper][org.kde.image][General]
+    Image=file:///run/cix-plasmalogin-wallpaper/wallpaper
+  '';
+
+  systemd.tmpfiles.rules = [
+    "L+ /var/lib/plasmalogin/.config/kcminputrc - - - - /run/cix-plasmalogin-input/kcminputrc"
+  ];
+
   systemd.services.plasmalogin-input-settings = {
     description = "Copy the desktop's pointer settings to the login screen";
     wantedBy = [ "display-manager.service" ];
     before = [ "display-manager.service" ];
-    serviceConfig.Type = "oneshot";
+    serviceConfig = {
+      Type = "oneshot";
+      # Desktop-owned paths must never be read with root's access
+      User = config.users.users.cardaria.name;
+      RuntimeDirectory = "cix-plasmalogin-input";
+      RuntimeDirectoryMode = "0755";
+      RuntimeDirectoryPreserve = true;
+      NoNewPrivileges = true;
+      ProtectSystem = "strict";
+    };
     path = [ pkgs.coreutils ];
     script = ''
-      install -d -m755 -o plasmalogin -g plasmalogin /var/lib/plasmalogin/.config
       if [ -e ${source} ]; then
-        install -m644 -o plasmalogin -g plasmalogin ${source} /var/lib/plasmalogin/.config/kcminputrc
+        install -m644 ${source} /run/cix-plasmalogin-input/kcminputrc
       fi
     '';
   };
@@ -43,7 +57,15 @@ in
     description = "Copy the desktop wallpaper to the login screen";
     wantedBy = [ "display-manager.service" ];
     before = [ "display-manager.service" ];
-    serviceConfig.Type = "oneshot";
+    serviceConfig = {
+      Type = "oneshot";
+      User = config.users.users.cardaria.name;
+      RuntimeDirectory = "cix-plasmalogin-wallpaper";
+      RuntimeDirectoryMode = "0755";
+      RuntimeDirectoryPreserve = true;
+      NoNewPrivileges = true;
+      ProtectSystem = "strict";
+    };
     path = [
       pkgs.coreutils
       pkgs.gawk
@@ -55,8 +77,7 @@ in
       ' ${desktopConfig} 2>/dev/null || true)
 
       if [ -n "$image" ] && [ -f "$image" ]; then
-        install -m644 -o plasmalogin -g plasmalogin "$image" ${greeterDir}/wallpaper
-        printf '[Greeter][Wallpaper][org.kde.image][General]\nImage=file://${greeterDir}/wallpaper\n' > ${greeterConfig}
+        install -m644 "$image" /run/cix-plasmalogin-wallpaper/wallpaper
       fi
     '';
   };

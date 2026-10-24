@@ -2,7 +2,7 @@
 title: Login
 category: desktop
 tags: [plasma-login-manager, session, pam, kwallet, recovery]
-updated: 2026-10-10
+updated: 2026-10-24
 ---
 
 # Login
@@ -30,28 +30,29 @@ sequenceDiagram
 
 - `modules/nixos/login.nix` enables the login manager. Plasma's module
   makes Plasma (Wayland) the default session.
-- Mouse and touchpad settings follow the desktop: the greeter user can't read
-  `~/.config`, so `plasmalogin-input-settings.service` copies
-  `~/.config/kcminputrc` to `/var/lib/plasmalogin/.config/` at boot, and a
-  path unit runs it again whenever System Settings saves the file. The next
-  time the login screen starts, it uses the new speed.
+- Mouse and touchpad settings follow the desktop: `plasmalogin-input-settings.service`
+  runs as the desktop user and copies `~/.config/kcminputrc` into
+  `/run/cix-plasmalogin-input/`. The greeter's config links to that copy.
+  A path unit runs it again whenever System Settings saves the file; the
+  next login screen uses the new speed.
 - The wallpaper follows the desktop: `plasmalogin-wallpaper.service` reads the
   image path from `~/.config/plasma-org.kde.plasma.desktop-appletsrc` and
-  copies the image to `/var/lib/plasmalogin/wallpaper`. It then writes the
-  setting to `/etc/plasmalogin.conf`, the file the greeter reads. A path unit
+  copies the image as the desktop user to `/run/cix-plasmalogin-wallpaper/wallpaper`.
+  The declared `/etc/plasmalogin.conf` points the greeter at that file. A path unit
   runs it again whenever Plasma rewrites that file, so a new wallpaper needs no
   rebuild; the login screen shows it the next time it starts.
-- Settings go to `/etc/plasmalogin.conf.d/99-user.conf` through
-  `services.displayManager.plasma-login-manager.settings` (none are set).
+- `environment.etc` declares the exact nested KConfig section in `/etc/plasmalogin.conf`;
+  the native INI generator escapes those brackets. The copy services have no root
+  file access and cannot modify system files.
 - The greeter's KWin is pinned to the 5060 by a drop-in on
   `plasma-login-kwin_wayland.service` ([Plasma](plasma.md#gpu-selection)).
 - The greeter reads `/var/lib/plasmalogin/.config/kwinoutputconfig.json`, a
   store copy of `dotfiles/kwin/draba/kwinoutputconfig.json` declared in
-  `hosts/draba/graphics.nix`: the same 160 Hz mode and 150% scale as the
-  session. A display change made in the session reaches the greeter after the
+  `hosts/draba/graphics.nix`: the saved mode and scale for each display connection.
+  DisplayPort uses 160 Hz at 150%; the saved HDMI setup differs. A display change made in the session reaches the greeter after the
   next rebuild.
-- The kernel console, the greeter and the session all run the monitor at
-  160 Hz, so no mode switch blanks the screen between them
+- With DisplayPort, the kernel console, greeter and session use
+  160 Hz to avoid a mode switch between them
   ([draba](../architecture/draba.md#early-kms-and-console-mode)).
 - The greeter's keyboard layout comes from `services.xserver.xkb.layout`
   through `org.freedesktop.locale1`.
@@ -91,7 +92,7 @@ which ends the graphical session. Save your work, log out, switch to TTY2
 | Black screen for seconds around login | a mode switch: compare `video=` in `hosts/draba/graphics.nix` with `kscreen-doctor -o` |
 | KWallet asks for a password after login | the wallet password differs from the account password; change it in KWallet Manager |
 | Login screen mouse speed differs from the desktop | `systemctl status plasmalogin-input-settings.path plasmalogin-input-settings.service`; the greeter picks up a copy only when it starts |
-| Login wallpaper differs from the desktop | `systemctl status plasmalogin-wallpaper.path plasmalogin-wallpaper.service`; `/etc/plasmalogin.conf` should point at `/var/lib/plasmalogin/wallpaper` |
+| Login wallpaper differs from the desktop | `systemctl status plasmalogin-wallpaper.path plasmalogin-wallpaper.service`; `/etc/plasmalogin.conf` should name `/run/cix-plasmalogin-wallpaper/wallpaper` |
 | Wrong keyboard layout at the greeter | `localectl status` should show X11 layout `se` |
 
 ## Related
