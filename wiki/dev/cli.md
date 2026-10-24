@@ -45,8 +45,9 @@ check the applications and both `systemctl --failed` and
 - The commands work on `<reposDir>/cix` and `<reposDir>/pve`; `reposDir` is the Home Manager option
   `cix.reposDir` (default `~/Repos`), so a checkout elsewhere is one line.
 
-`cix update pve` asks once, after one review of every guest. It deploys only if every
-check passes first, and stops at the first guest that doesn't pass them afterwards; logs
+`cix update pve` asks once, after one review of every guest. It requires healthy target units
+and lists failing baseline checks for explicit acceptance. It stops at the first guest that
+introduces a failing check or fails its unit checks afterwards; logs
 and the review stay in `~/.local/state/cix/updates`.
 
 `cix update <guest-a> <guest-b> --no-update` uses the same planner for just those guests,
@@ -59,6 +60,11 @@ The command rejects concurrent runs and untracked files, and asks before
 including working-tree edits. Checks and the build use the same immutable
 source snapshot. Recovery-key verification must succeed; run `cix backup`
 separately when a key needs uploading.
+
+Guest activation first runs `dry-activate` and prints its unit preview. The running closure,
+system profile and registry plan must still match the review before deployment. An interruption
+stops the local step's process group; an already-started remote activation may continue, so
+inspect the guest and follow the recorded recovery command before retrying.
 
 Before installation, the candidate's `nvidia-smi --help` must start successfully
 when present. This catches executable/loader failures without requiring the

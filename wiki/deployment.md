@@ -204,9 +204,10 @@ In order:
    version jumps are listed again at the end. For `pve` it also shows the Proxmox host's pending
    apt updates and whether it needs a reboot; the host is yours to update.
 5. **One question**, then the downloads: every build and image lands on the guests first, while the
-   DNS still works.
+   DNS still works. Each guest's `dry-activate` preview is printed before activation; a failed
+   preview stops the run.
 6. **Deploys, stage by stage** (`update.stage`; the guest serving DNS last). After each guest every
-   check must pass again and the guest must have no failed units within `update.settle` seconds, or
+   check except explicitly accepted baseline failures must pass again and the guest must have no failed units within `update.settle` seconds, or
    the run stops and prints the command that returns that guest to its previous build. A guest with
    `update.autoRollback` returns to it by itself.
 
@@ -219,7 +220,9 @@ In order:
 The inputs are shared: `cix update <guest>` moves them for every guest, and the others take them at
 their next deploy. A guest whose containers are `self-managed` is only reported. At the end it lists
 the files the update changed in the pve repo (`flake.lock` and the files with moved image pins) and offers to
-commit exactly those, as `chore(flake): update the guests on pve`; it never pushes.
+commit exactly those, as `chore(flake): update the guests on pve`; it never pushes. Files with
+pre-existing edits or changes since the build require manual review and commit. The private repo's
+secret check runs before an automatic commit.
 
 ## Roll back a system
 

@@ -86,6 +86,7 @@ fi
 state=${XDG_STATE_HOME:-$HOME/.local/state}/cix/updates
 mkdir -p "$state"
 run=$(mktemp -d "$state/pve.XXXXXXXX")
+git diff --name-only -z HEAD > "$run/preexisting"
 phase=plan
 guest=
 address=
@@ -113,9 +114,16 @@ trap 'exit 129' HUP
 
 # A guest's shell, as root with this machine's key
 remote() {
+  local address=$1 command
+  shift
+  printf -v command '%q ' "$@"
+  ssh -n -o BatchMode=yes -o ConnectTimeout=10 "root@$address" "$command"
+}
+
+remote_script() {
   local address=$1
   shift
-  ssh -n -o BatchMode=yes -o ConnectTimeout=10 "root@$address" "$@"
+  ssh -n -o BatchMode=yes -o ConnectTimeout=10 "root@$address" "$1"
 }
 
 # --- Plan: everything comes from the registry, so a new guest is one entry there ---
@@ -144,7 +152,7 @@ plan='cs:
 
 load_plan() {
   local g
-  nix eval --json --option warn-dirty false "$1#nixosConfigurations" --apply "$plan" > "$run/registry.json"
+  nix eval --json --option warn-dirty false "$1#nixosConfigurations" --apply "$plan" > "$run/registry.json" || return 1
   for g in "${requested[@]}"; do
     [[ $g == pve ]] || jq -e --arg g "$g" '.guests | any(.name == $g)' "$run/registry.json" > /dev/null || {
       echo "Unknown guest: $g" >&2
@@ -153,7 +161,7 @@ load_plan() {
   done
   jq -n --slurpfile registry "$run/registry.json" --args \
     '$registry[0] | .guests |= (map(select(.name as $n | ($ARGS.positional | index("pve") != null or index($n) != null))) | sort_by(.stage, .name))' \
-    "${requested[@]}" > "$run/plan.json"
+    "${requested[@]}" > "$run/plan.json" || return 1
   jq -e '.guests | length > 0' "$run/plan.json" > /dev/null
 }
 
@@ -161,7 +169,6 @@ guests() {
   jq -r '.guests[].name' "$run/plan.json"
 }
 
-# One field of a guest
 field() {
   jq -r --arg g "$1" ".guests[] | select(.name == \$g) | .$2" "$run/plan.json"
 }
@@ -279,7 +286,7 @@ bump() {
   ref=${image%@*}
   name=${ref%:*}
   old=${image#*@}
-  new=$(skopeo inspect --retry-times 2 --raw "docker://$ref" | skopeo manifest-digest /dev/stdin)
+  new=$(skopeo inspect --retry-times 2 --raw "docker://$ref" | skopeo manifest-digest /dev/stdin) || return 1
   [[ $new =~ ^sha256:[0-9a-f]{64}$ ]] || {
     echo "No digest for $ref" >&2
     return 1
@@ -290,9 +297,9 @@ bump() {
     echo "The pin $image appears $count times in the repo; expected once" >&2
     return 1
   }
-  file=$(git grep -lF -- "$image")
-  content=$(< "$file")
-  printf '%s\n' "${content//"$image"/"$ref@$new"}" > "$file"
+  file=$(git grep -lF -- "$image") || return 1
+  content=$(< "$file") || return 1
+  printf '%s\n' "${content//"$image"/"$ref@$new"}" > "$file" || return 1
   from=$(label "$name@$old")
   to=$(label "$name@$new")
   if [[ -n $(major "$from") && -n $(major "$to") && $(major "$from") != "$(major "$to")" ]]; then
@@ -315,7 +322,7 @@ host_report() {
   address=$(jq -r '.host // empty' "$run/plan.json")
   [[ -n $address ]] || return 0
   # shellcheck disable=SC2016
-  remote "$address" '
+  remote_script "$address" '
     n=$(apt-get -s -q dist-upgrade 2> /dev/null | grep -c "^Inst ")
     printf "apt\t%s update%s · apt full-upgrade\n" "$n" "$([ "$n" = 1 ] || echo s)"
     r=$(uname -r)
@@ -352,7 +359,7 @@ prepare_rollbacks() {
   local g address number path
   for g in "${targets[@]}"; do
     address=$(field "$g" address)
-    remote "$address" "$generation_scan" > "$run/$g.generations" || return 1
+    remote_script "$address" "$generation_scan" > "$run/$g.generations" || return 1
     if $list; then
       section "$g"
       show_generations "$run/$g.generations"
@@ -372,7 +379,7 @@ bump_all() {
   for g in "${targets[@]}"; do
     [[ $(field "$g" containers) == pinned ]] || continue
     while IFS=$'\t' read -r container image; do
-      bump "$g" "$container" "$image"
+      bump "$g" "$container" "$image" || return 1
     done < <(jq -r --arg g "$g" '.guests[] | select(.name == $g) | .images[] | [.container, .image] | @tsv' "$run/plan.json")
   done
 }
@@ -386,8 +393,8 @@ build_all() {
   for g in "${targets[@]}"; do
     # The output link keeps the build from garbage collection until it is deployed
     nix build "$source#nixosConfigurations.$g.config.system.build.toplevel" \
-      --out-link "$run/$g" --print-out-paths --no-update-lock-file
-    [[ -x $(readlink -e "$run/$g")/bin/switch-to-configuration ]]
+      --out-link "$run/$g" --print-out-paths --no-update-lock-file || return 1
+    [[ -x $(readlink -e "$run/$g")/bin/switch-to-configuration ]] || return 1
   done
 }
 
@@ -403,6 +410,11 @@ compare_all() {
       return 1
     fi
     printf '%s\n' "$current" > "$run/$g.previous"
+    remote "$address" readlink -f /nix/var/nix/profiles/system > "$run/$g.profile" || return 1
+    [[ $(< "$run/$g.profile") == "$current" ]] || {
+      echo "$g's running system differs from its boot profile; reconcile them before cix $action." >&2
+      return 1
+    }
     awk -F '\t' -v g="$g" '$1 == g { print $2 "\t" $3 "\t" $4 }' "$run/images.tsv" > "$run/$g.images"
     : > "$run/$g.changes"
     if [[ $new == "$current" ]]; then
@@ -468,7 +480,7 @@ download_all() {
       [[ -n $image ]] || continue
       printf '%spulling %s\n' "$prefix" "${image%%@*}" > "$ui_status"
       remote "$address" docker image inspect "$image" > /dev/null 2>&1 ||
-        remote "$address" docker pull -q "$image"
+        remote "$address" docker pull -q "$image" || return 1
     done
   done
 }
@@ -480,6 +492,10 @@ unchanged() {
     echo "$g changed since the review; nothing further was deployed."
     return 1
   }
+  [[ $(remote "$address" readlink -f /nix/var/nix/profiles/system) == "$(< "$run/$g.profile")" ]] || {
+    echo "$g's system profile changed since the review."
+    return 1
+  }
   if [[ $action == rollback ]]; then
     [[ $(remote "$address" readlink -f /nix/var/nix/profiles/system) == "$(awk -F '\t' '$1 == "current" { print $3 }' "$run/$g.generations")" ]] || {
       echo "$g's system profile changed since the review."
@@ -489,6 +505,15 @@ unchanged() {
       echo "$g's selected generation is no longer available."
       return 1
     }
+  fi
+}
+
+preview_one() {
+  local address=$2 new=$3
+  if [[ $action == rollback ]]; then
+    remote "$address" nixos-rebuild dry-activate --store-path "$new" --no-reexec
+  else
+    nixos-rebuild dry-activate --store-path "$new" --target-host "root@$address" --no-reexec
   fi
 }
 
@@ -504,10 +529,15 @@ deploy_one() {
     echo "$g does not run the new build"
     return 1
   }
+  [[ $(remote "$address" readlink -f /nix/var/nix/profiles/system) == "$new" ]] || {
+    echo "$g's system profile does not point to the new build"
+    return 1
+  }
   healthy "$(field "$g" settle)" "$address"
 }
 
 rollback_one() {
+  preview_one "$@" || return 1
   deploy_one "$@"
 }
 
@@ -561,7 +591,6 @@ all_changes() {
   echo
 }
 
-# "1 guest", "2 guests"
 count_guests() {
   if (($1 == 1)); then echo "1 guest"; else echo "$1 guests"; fi
 }
@@ -570,6 +599,7 @@ count_guests() {
 
 phase=plan
 load_plan "$REPO"
+jq 'del(.guests[].images)' "$run/plan.json" > "$run/preflight-plan.json"
 mapfile -t targets < <(guests)
 section "cix $action $target"
 
@@ -599,6 +629,8 @@ if [[ -s $run/baseline || -s $run/failed-units ]]; then
 else
   mark_ok "Health" "$(count_guests "${#targets[@]}"), every check passes"
 fi
+health_detail="checks pass"
+[[ ! -s $run/baseline ]] || health_detail="no new failing checks"
 
 : > "$run/images.tsv"
 if [[ $action == rollback ]]; then
@@ -643,13 +675,21 @@ else
   # Checks, builds and the deploy all use this one snapshot of the tree
   phase=checks
   check_all() {
-    snapshot
-    nix flake check "$(jq -er '.path' "$run/source.json")" --no-update-lock-file
+    local path
+    snapshot || return 1
+    path=$(jq -er '.path' "$run/source.json") || return 1
+    nix flake check "$path" --no-update-lock-file
   }
   task "Checks" "$run/checks.log" check_all
   source=$(jq -er '.path' "$run/source.json")
   [[ $source == /nix/store/* && -f $source/flake.nix ]]
   load_plan "$source"
+  jq 'del(.guests[].images)' "$run/plan.json" > "$run/snapshot-plan.json"
+  cmp -s "$run/preflight-plan.json" "$run/snapshot-plan.json" || {
+    echo "The registry changed during preparation; review again with --no-update." >&2
+    exit 1
+  }
+  mapfile -t targets < <(guests)
   mark_ok "Checks" "passed"
 
   phase=build
@@ -708,6 +748,12 @@ if [[ $action == update ]]; then
   mark_ok "Download" "$(count_guests "${#changed[@]}") ready"
 fi
 
+phase=preview
+for g in "${changed[@]}"; do
+  task "Preview $g" "$run/preview-$g.log" preview_one "$g" "$(field "$g" address)" "$(candidate "$g")"
+  $ui_verbose || cat "$run/preview-$g.log"
+done
+
 phase=deploy
 for g in "${changed[@]}"; do
   guest=$g
@@ -719,7 +765,7 @@ for g in "${changed[@]}"; do
     [[ $action == rollback ]] || rm -- "$run/$g"
     previous=
     if [[ $action == update ]]; then
-      mark_ok "$g" "deployed · checks pass"
+      mark_ok "$g" "deployed · $health_detail"
     else
       mark_ok "$g" "rolled back · checks pass"
     fi
@@ -741,7 +787,12 @@ done
 phase=complete
 section "Done"
 if [[ $action == update ]]; then
-  mark_ok "Guests" "${#changed[@]} updated, every check passes"
+  if [[ -s $run/baseline ]]; then
+    mark_ok "Guests" "${#changed[@]} updated, no new failing checks"
+    note "Accepted baseline failures were excluded from the deployment checks."
+  else
+    mark_ok "Guests" "${#changed[@]} updated, every check passes"
+  fi
 else
   mark_ok "Guests" "${#changed[@]} rolled back, every check passes"
 fi
@@ -764,7 +815,16 @@ for file in "${recorded[@]}"; do
   if [[ $file == flake.lock ]]; then item "$file" "package versions"; else item "$file" "image pins"; fi
 done
 if ask "Commit them, so the repo matches what the servers run?"; then
+  for file in "${recorded[@]}"; do
+    if grep -zqxF -- "$file" "$run/preexisting" || ! cmp -s -- "$file" "$source/$file"; then
+      note "$file had earlier changes or changed after the build; commit it manually after review."
+      note "Left uncommitted in ${REPO/#$HOME/\~}"
+      exit 0
+    fi
+  done
   git add -- "${recorded[@]}"
+  git diff --cached --stat -- "${recorded[@]}"
+  "$REPO/scripts/check-secrets.sh"
   git commit -q -m "chore(flake): update the guests on pve" -- "${recorded[@]}"
   mark_ok "Committed" "chore(flake): update the guests on pve · not pushed"
 else

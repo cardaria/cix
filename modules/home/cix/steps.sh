@@ -14,7 +14,6 @@ section() {
   printf '\n%s%s%s\n' "$ui_bold" "$*" "$ui_off"
 }
 
-# A finished step: its mark, the label in a column, a detail
 mark_ok() {
   printf '  %s✓%s %-16s%s\n' "$ui_green" "$ui_off" "$1" "${2:-}"
 }
@@ -22,12 +21,10 @@ mark_fail() {
   printf '  %s✗%s %-16s%s\n' "$ui_red" "$ui_off" "$1" "${2:-}" >&2
 }
 
-# A line inside a section, and a dimmed side note
 item() {
   printf '    %-22s %s\n' "$1" "${2:-}"
 }
 
-# A second detail under a finished step's first
 detail() {
   printf '%20s%s\n' '' "$1"
 }
@@ -46,23 +43,31 @@ task() {
   shift 2
   if $ui_verbose; then
     section "$label"
-    "$@" 2>&1 | tee -a "$log" || status=$?
-  else
-    "$@" >> "$log" 2>&1 < /dev/null &
-    ui_pid=$!
-    if [[ -t 1 ]]; then
-      ui_hide
-      while kill -0 "$ui_pid" 2> /dev/null; do
-        text=
-        [[ -z $ui_status || ! -r $ui_status ]] || text=$(< "$ui_status")
-        printf '\r\033[K  %s%s%s %s  %s%s%s' "$ui_cyan" "${frames[i++ % ${#frames[@]}]}" "$ui_off" "$label" "$ui_dim" "$text" "$ui_off"
-        sleep 0.08
-      done
-      printf '\r\033[K'
-    fi
-    wait "$ui_pid" || status=$?
-    ui_pid=
   fi
+  # A separate process group keeps interrupted steps from leaving deploy commands running
+  set -m
+  (
+    set +m
+    if $ui_verbose; then
+      "$@" 2>&1 | tee -a "$log"
+    else
+      "$@" >> "$log" 2>&1 < /dev/null
+    fi
+  ) &
+  ui_pid=$!
+  set +m
+  if [[ -t 1 ]] && ! $ui_verbose; then
+    ui_hide
+    while kill -0 "$ui_pid" 2> /dev/null; do
+      text=
+      [[ -z $ui_status || ! -r $ui_status ]] || text=$(< "$ui_status")
+      printf '\r\033[K  %s%s%s %s  %s%s%s' "$ui_cyan" "${frames[i++ % ${#frames[@]}]}" "$ui_off" "$label" "$ui_dim" "$text" "$ui_off"
+      sleep 0.08
+    done
+    printf '\r\033[K'
+  fi
+  wait "$ui_pid" || status=$?
+  ui_pid=
   if ((status)); then
     mark_fail "$label" "failed ($( ((status > 128)) && echo "signal $((status - 128))" || echo "status $status")); its log ends:"
     tail -n 12 "$log" | sed 's/^/      /' >&2
@@ -70,9 +75,8 @@ task() {
   return "$status"
 }
 
-# Stops a running step and shows the cursor again
 ui_cleanup() {
-  [[ -z $ui_pid ]] || kill "$ui_pid" 2> /dev/null || true
+  [[ -z $ui_pid ]] || kill -- "-$ui_pid" 2> /dev/null || true
   ui_show
 }
 

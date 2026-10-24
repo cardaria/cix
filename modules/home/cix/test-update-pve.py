@@ -41,7 +41,7 @@ REGISTRY = {
 LOCK = {'nodes': {n: {'locked': {'rev': r * 40, 'lastModified': 1790000000}} for n, r in
                   (('nixpkgs-stable', '1'), ('nixpkgs-pve', '2'))}, 'root': 'root', 'version': 7}
 
-MOCK = r'''import json, os, pathlib, sys
+MOCK = r'''import json, os, pathlib, shlex, sys
 p = pathlib.Path
 root = p(os.environ['CASE_ROOT'])
 name = p(sys.argv[0]).name
@@ -65,6 +65,10 @@ def broken():
 if name == 'nix':
     action = ' '.join(args[:2])
     if args[0] == 'eval':
+        if 'plan-drift' in fail and any(str(root / 'store/source') + '#' in arg for arg in args):
+            registry['guests'][0]['stage'] = 99
+            print(json.dumps(registry))
+            sys.exit(0)
         print((root / 'registry.json').read_text())
     elif action == 'flake update':
         assert args[2:] == ['nixpkgs-stable', 'nixpkgs-pve'], args
@@ -73,6 +77,14 @@ if name == 'nix':
         (p.cwd() / 'flake.lock').write_text(json.dumps(lock, indent=2) + '\n')
     elif action == 'flake metadata':
         assert '--no-update-lock-file' in args, args
+        if 'snapshot' in fail:
+            sys.exit(42)
+        import shutil, subprocess
+        for file in subprocess.check_output(['git', 'ls-files', '-z']).decode().split('\0'):
+            if file:
+                target = root / 'store/source' / file
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(file, target)
         print(json.dumps({'path': str(root / 'store/source')}))
     elif action == 'flake check':
         assert args[2] == str(root / 'store/source'), args
@@ -80,7 +92,7 @@ if name == 'nix':
     elif args[0] == 'build':
         guest = args[1].split('#nixosConfigurations.')[1].split('.')[0]
         assert args[1].startswith(str(root / 'store/source') + '#'), args
-        if 'build' in fail:
+        if 'build' in fail or 'build:' + guest in fail:
             sys.exit(42)
         p(args[args.index('--out-link') + 1]).symlink_to(root / 'store' / (guest + ('-old' if 'same' in fail else '-new')))
     elif args[:2] == ['path-info', '--json']:
@@ -93,6 +105,10 @@ if name == 'nix':
             guest = by_address[args[3].split('@')[1]]
             if 'drift:' + guest in fail:
                 (root / 'running' / guest).write_text(str(root / 'store' / (guest + '-new')))
+            if 'profile-drift:' + guest in fail:
+                (root / 'profiles' / guest).write_text(str(root / 'store' / (guest + '-new')))
+            if 'edit-after-build' in fail:
+                (p.cwd() / 'flake.lock').write_text('{}\n')
     else:
         raise AssertionError(args)
 elif name == 'nix-store':
@@ -106,6 +122,10 @@ elif name == 'nix-store':
 elif name == 'ssh':
     host = next(a for a in args if a.startswith('root@'))[5:]
     command = args[args.index('root@' + host) + 1:]
+    if not command[0].startswith('\n'):
+        lexer = shlex.shlex(' '.join(command), posix=True, punctuation_chars=True)
+        lexer.whitespace_split = True
+        command = list(lexer)
     guest = by_address.get(host)
     if host == registry['host']:
         print('apt\t1 update · apt full-upgrade\nkernel\t7.0, the newest installed')
@@ -115,7 +135,7 @@ elif name == 'ssh':
     elif command == ['readlink', '-f', '/run/current-system']:
         print(running(guest))
     elif command == ['readlink', '-f', '/nix/var/nix/profiles/system']:
-        print(running(guest))
+        print((root / 'profiles' / guest).read_text())
     elif command[:2] == ['readlink', '-e']:
         if 'collected:' + guest in fail:
             sys.exit(1)
@@ -134,17 +154,24 @@ elif name == 'ssh':
         subprocess = __import__('subprocess')
         sys.exit(subprocess.run([str(root / 'bin/nix-store'), *command[1:]]).returncode)
     elif command[:3] == ['docker', 'image', 'inspect']:
+        assert len(command) == 4, command
         sys.exit(1)
     elif command[:2] == ['docker', 'pull']:
-        pass
+        assert len(command) == 4, command
+        if 'pull:' + guest in fail:
+            sys.exit(42)
     else:
         raise AssertionError(args)
 elif name == 'nixos-rebuild':
-    assert args[0] == 'switch' and args[1] == '--store-path' and args[3] == '--target-host', args
+    assert args[0] in ('dry-activate', 'switch') and args[1] == '--store-path' and args[3] == '--target-host', args
     guest = by_address[args[4][5:]]
+    if args[0] == 'dry-activate':
+        sys.exit(42 if 'preview:' + guest in fail else 0)
     if 'switch:' + guest in fail:
         sys.exit(4)
     (root / 'running' / guest).write_text(args[2])
+    if 'profile:' + guest not in fail and not ('recovery-profile:' + guest in fail and args[2].endswith('-old')):
+        (root / 'profiles' / guest).write_text(args[2])
 elif name == 'skopeo':
     if args[0] == 'manifest-digest':
         sys.stdin.read()
@@ -180,6 +207,10 @@ class UpdatePve(unittest.TestCase):
         self.git('init', '-q')
         (self.repo / 'flake.nix').write_text('{}\n')
         (self.repo / 'flake.lock').write_text(json.dumps(LOCK, indent=2) + '\n')
+        (self.repo / 'scripts').mkdir()
+        check = self.repo / 'scripts/check-secrets.sh'
+        check.write_text('#!/bin/sh\nexit 0\n')
+        check.chmod(0o755)
         for guest, (_, _, _, _, _, images) in GUESTS.items():
             lines = ''.join(f'  {c}.image = "{i}";\n' for c, i in images.items())
             (self.repo / 'hosts' / f'{guest}.nix').write_text('{\n' + lines + '}\n')
@@ -188,6 +219,7 @@ class UpdatePve(unittest.TestCase):
         (self.root / 'store/source').mkdir(parents=True)
         (self.root / 'store/source/flake.nix').write_text('{}\n')
         (self.root / 'running').mkdir()
+        (self.root / 'profiles').mkdir()
         for guest in GUESTS:
             for kind in ('old', 'new', 'older'):
                 target = self.root / 'store' / f'{guest}-{kind}' / 'bin'
@@ -195,6 +227,7 @@ class UpdatePve(unittest.TestCase):
                 (target / 'switch-to-configuration').write_text('#!/bin/sh\nexit 99\n')
                 (target / 'switch-to-configuration').chmod(0o755)
             (self.root / 'running' / guest).write_text(str(self.root / 'store' / f'{guest}-old'))
+            (self.root / 'profiles' / guest).write_text(str(self.root / 'store' / f'{guest}-old'))
         bindir = self.root / 'bin'
         bindir.mkdir()
         mock = bindir / 'mock'
@@ -228,7 +261,7 @@ class UpdatePve(unittest.TestCase):
         return Path((self.root / 'running' / guest).read_text()).name
 
     def deploys(self):
-        return [c[5][5:] for c in self.calls if c[0] == 'nixos-rebuild']
+        return [c[5][5:] for c in self.calls if c[:2] == ['nixos-rebuild', 'switch']]
 
     def addresses(self, *guests):
         return ['root@' + GUESTS[g][0] for g in guests]
@@ -248,7 +281,7 @@ class UpdatePve(unittest.TestCase):
         self.run_update()
         first = next(i for i, c in enumerate(self.calls) if c[0] == 'nixos-rebuild')
         copies = [i for i, c in enumerate(self.calls) if c[:2] == ['nix', 'copy']]
-        pulls = [i for i, c in enumerate(self.calls) if c[0] == 'ssh' and 'pull' in c]
+        pulls = [i for i, c in enumerate(self.calls) if c[0] == 'ssh' and 'docker pull ' in c[-1]]
         self.assertEqual(len(copies), 5)
         self.assertEqual(len(pulls), 2)
         self.assertTrue(all(i < first for i in copies + pulls))
@@ -308,6 +341,11 @@ class UpdatePve(unittest.TestCase):
         self.assertEqual(self.deploys(), [])
         self.assertFalse(any(c[:3] == ['nix', 'flake', 'update'] for c in self.calls))
 
+    def test_registry_drift_after_preflight_requires_a_new_review(self):
+        self.assertNotEqual(self.run_update(fail='plan-drift'), 0)
+        self.assertIn('registry changed during preparation', self.output)
+        self.assertEqual(self.deploys(), [])
+
     def test_group_cannot_be_mixed_with_guests(self):
         self.assertNotEqual(self.run_update('pve', 'gamma'), 0)
         self.assertEqual(self.calls, [])
@@ -316,6 +354,34 @@ class UpdatePve(unittest.TestCase):
         self.assertNotEqual(self.run_update('edge', '--no-update', fail='drift:edge'), 0)
         self.assertEqual(self.deploys(), [])
         self.assertIn('changed since the review', self.output)
+
+    def test_pending_boot_profile_change_invalidates_review(self):
+        self.assertNotEqual(self.run_update('edge', '--no-update', fail='profile-drift:edge'), 0)
+        self.assertEqual(self.deploys(), [])
+        self.assertIn('system profile changed since the review', self.output)
+
+    def test_different_running_and_boot_profiles_require_explicit_reconciliation(self):
+        (self.root / 'profiles/edge').write_text(str(self.root / 'store/edge-older'))
+        self.assertNotEqual(self.run_update('edge', '--no-update'), 0)
+        self.assertIn('running system differs from its boot profile', self.output)
+        self.assertEqual(self.deploys(), [])
+        self.assertFalse(any(c[:2] == ['nix', 'copy'] for c in self.calls))
+
+    def test_preview_failure_never_switches(self):
+        self.assertNotEqual(self.run_update('pve', '--no-update', fail='preview:edge'), 0)
+        self.assertEqual(self.deploys(), [])
+
+    def test_every_preview_finishes_before_the_first_switch(self):
+        self.assertEqual(self.run_update('pve', '--no-update'), 0, self.output)
+        first = next(i for i, c in enumerate(self.calls) if c[:2] == ['nixos-rebuild', 'switch'])
+        previews = [i for i, c in enumerate(self.calls) if c[:2] == ['nixos-rebuild', 'dry-activate']]
+        self.assertEqual(len(previews), 5)
+        self.assertTrue(all(i < first for i in previews))
+
+    def test_profile_mismatch_is_not_reported_as_deployed(self):
+        self.assertNotEqual(self.run_update('gamma', '--no-update', fail='profile:gamma'), 0)
+        self.assertIn('system profile does not point to the new build', self.output)
+        self.assertNotIn('deployed · checks pass', self.output)
 
     def rollback(self, *args, **kwargs):
         self.env['CIX_ACTION'] = 'rollback'
@@ -389,6 +455,12 @@ class UpdatePve(unittest.TestCase):
         self.assertIn('automatic recovery failed', self.output)
         self.assertNotIn('back on its previous build and healthy', self.output)
 
+    def test_recovery_profile_mismatch_is_not_reported_as_restored(self):
+        self.assertNotEqual(self.run_update('edge', '--no-update', fail='broken:edge,recovery-profile:edge'), 0)
+        self.assertEqual(self.running('edge'), 'edge-old')
+        self.assertIn('automatic recovery failed', self.output)
+        self.assertNotIn('back on its previous build and healthy', self.output)
+
     def test_host_is_reported_for_pve_only(self):
         self.run_update(reply='n\n')
         self.assertIn('1 update · apt full-upgrade', self.output)
@@ -452,6 +524,20 @@ class UpdatePve(unittest.TestCase):
         self.assertIn('Left uncommitted', self.output)
         self.assertIn('flake.lock', self.git('status', '--short'))
 
+    def test_commit_refuses_changes_made_after_the_build(self):
+        before = self.commits()
+        self.assertEqual(self.run_update(reply='y\ny\n', fail='edit-after-build'), 0, self.output)
+        self.assertEqual(self.commits(), before)
+        self.assertIn('changed after the build', self.output)
+
+    def test_commit_preserves_preexisting_changes_to_candidate_files(self):
+        before = self.commits()
+        with (self.repo / 'hosts/alpha.nix').open('a') as f:
+            f.write('# An unrelated pending change\n')
+        self.assertEqual(self.run_update(reply='y\ny\ny\n'), 0, self.output)
+        self.assertEqual(self.commits(), before)
+        self.assertIn('had earlier changes', self.output)
+
     def test_nothing_to_commit(self):
         self.assertEqual(self.run_update('pve', '--no-update', reply='y\n'), 0, self.output)
         self.assertIn('Nothing to commit', self.output)
@@ -465,6 +551,13 @@ class UpdatePve(unittest.TestCase):
         self.assertEqual(self.run_update('pve', '--no-update'), 0, self.output)
         self.assertFalse(any(c[:3] == ['nix', 'flake', 'update'] or c[0] == 'skopeo' for c in self.calls))
         self.assertIn(OLD, self.pin('gamma'))
+
+    def test_remote_image_reference_remains_one_literal_argument(self):
+        registry = json.loads((self.root / 'registry.json').read_text())
+        gamma = next(g for g in registry['guests'] if g['name'] == 'gamma')
+        gamma['images'] = [{'container': 'player', 'image': 'example/app:tag; printf injected'}]
+        (self.root / 'registry.json').write_text(json.dumps(registry))
+        self.assertEqual(self.run_update('gamma', '--no-update'), 0, self.output)
 
     def test_no_images_keeps_pins(self):
         self.assertEqual(self.run_update('pve', '--no-images'), 0, self.output)
@@ -504,6 +597,24 @@ class UpdatePve(unittest.TestCase):
 
     def test_failed_build_stops_before_deploy(self):
         self.stops_during('build')
+
+    def test_verbose_first_build_failure_stops_the_batch(self):
+        self.assertNotEqual(self.run_update('pve', '--verbose', fail='build:alpha'), 0)
+        builds = [c for c in self.calls if c[:2] == ['nix', 'build']]
+        self.assertEqual(len(builds), 1, builds)
+        self.assertEqual(self.deploys(), [])
+
+    def test_verbose_first_image_failure_stops_the_batch(self):
+        with (self.repo / 'hosts/gamma.nix').open('a') as f:
+            f.write(f'# ghcr.io/x/tool:latest@{OLD}\n')
+        self.git('-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-qam', 'duplicate')
+        self.assertNotEqual(self.run_update('pve', '--verbose'), 0)
+        self.assertFalse(any(c[:3] == ['nix', 'flake', 'metadata'] for c in self.calls), self.calls)
+        self.assertEqual(self.deploys(), [])
+
+    def test_verbose_first_pull_failure_stops_before_switch(self):
+        self.assertNotEqual(self.run_update('pve', '--verbose', fail='pull:alpha'), 0)
+        self.assertEqual(self.deploys(), [])
 
     def test_unknown_option(self):
         self.assertNotEqual(self.run_update('pve', '--cuda'), 0)

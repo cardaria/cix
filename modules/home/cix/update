@@ -103,7 +103,7 @@ fi
 if [[ $target != "$host" ]]; then
   known=$(guests)
   for target in "${requested[@]}"; do
-    if [[ $target != pve ]] && ! grep -qx -- "$target" <<< "$known"; then
+    if [[ $target != pve ]] && ! grep -qxF -- "$target" <<< "$known"; then
       echo "cix $action: unknown target '$target'. Run cix $action to list the targets." >&2
       exit 1
     fi
@@ -277,8 +277,10 @@ else
   # Validation and the build both use the same immutable Git-flake snapshot
   phase=checks
   check_all() {
-    nix flake metadata --json --no-update-lock-file . > "$run/source.json"
-    nix flake check "$(jq -er '.path' "$run/source.json")" --no-update-lock-file
+    local snapshot
+    nix flake metadata --json --no-update-lock-file . > "$run/source.json" || return 1
+    snapshot=$(jq -er '.path' "$run/source.json") || return 1
+    nix flake check "$snapshot" --no-update-lock-file
   }
   task "Checks" "$run/checks.log" check_all
   source=$(jq -er '.path' "$run/source.json")
@@ -319,7 +321,7 @@ section "Changes at next boot"
 if ((total == 0)); then
   note "Same package versions; configuration only"
 else
-  changes_by_size | head -n 8 | while IFS=$'\t' read -r _ name ver; do item "$name" "$ver"; done
+  changes_by_size | awk 'NR <= 8' | while IFS=$'\t' read -r _ name ver; do item "$name" "$ver"; done
   ((total <= 8)) || note "… $((total - 8)) more · c at the question lists them all"
 fi
 if $dry; then

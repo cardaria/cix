@@ -8,10 +8,12 @@ import fcntl
 import json
 import os
 import shutil
+import signal
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 
 SOURCE = Path(__file__).resolve().parent
@@ -59,6 +61,9 @@ elif name == 'nix':
         assert args[2] == str(root / 'store/source'), args
     elif args[0] == 'eval':
         print(json.dumps(['edge', 'gamma']))
+    elif action == 'store diff-closures' and fail == 'many-changes':
+        for i in range(4000):
+            print(f'package-{i:05}: 1.0 → 2.0, +1.0 MiB')
     elif args[0] == 'build':
         assert '--no-update-lock-file' in args, args
         assert args[1] == str(root / 'store/source') + '#nixosConfigurations.draba.config.system.build.toplevel', args
@@ -152,6 +157,15 @@ class Update(unittest.TestCase):
         self.no_boot()
         self.assertEqual(len(list((self.root / 'state').glob('cix/updates/run.*/result'))), 1)
 
+    def test_large_change_list_is_truncated_without_a_pipeline_failure(self):
+        self.assertEqual(self.run_update('--dry-run', fail='many-changes'), 0, self.output)
+        self.assertIn('3992 more', self.output)
+        self.no_boot()
+
+    def test_guest_target_is_matched_literally(self):
+        self.assertNotEqual(self.run_update(target='g.mm.'), 0, self.output)
+        self.assertEqual(self.side_effects(), [])
+
     def test_retry_skips_update(self):
         self.assertEqual(self.run_update('--no-update'), 0, self.output)
         self.assertFalse(any(c[:3] == ['nix', 'flake', 'update'] for c in self.calls))
@@ -179,6 +193,11 @@ class Update(unittest.TestCase):
     def test_bad_metadata(self):
         self.assertNotEqual(self.run_update(fail='bad-metadata'), 0)
         self.assertIn('during checks', self.output)
+        self.no_boot()
+
+    def test_verbose_snapshot_failure_never_runs_checks(self):
+        self.assertNotEqual(self.run_update('--verbose', fail='snapshot'), 0)
+        self.assertFalse(any(c[:3] == ['nix', 'flake', 'check'] for c in self.calls), self.calls)
         self.no_boot()
 
     def test_missing_build_result(self):
@@ -399,6 +418,33 @@ class Update(unittest.TestCase):
             self.assertNotEqual(self.run_update(), 0)
         self.assertIn('Another cix update', self.output)
         self.assertEqual(self.side_effects(), [])
+
+    def test_interruption_stops_step_descendants(self):
+        for verbose in ('false', 'true'):
+            with self.subTest(verbose=verbose):
+                ready = self.root / f'ready-{verbose}'
+                survived = self.root / f'survived-{verbose}'
+                script = (SOURCE / 'steps.sh').read_text() + '''
+set -euo pipefail
+ui_verbose=$1
+trap ui_cleanup EXIT
+trap 'exit 143' TERM
+work() { bash -c 'echo ready > "$1"; sleep 1; touch "$2"' _ "$2" "$3"; :; }
+task Work "$4" work "$@"
+'''
+                process = subprocess.Popen(['bash', '-c', script, '_', verbose, str(ready), str(survived),
+                                            str(self.root / 'step.log')], stdout=subprocess.DEVNULL,
+                                           stderr=subprocess.DEVNULL)
+                self.addCleanup(lambda: process.poll() is not None or process.kill())
+                for _ in range(100):
+                    if ready.exists():
+                        break
+                    time.sleep(0.01)
+                self.assertTrue(ready.exists())
+                process.send_signal(signal.SIGTERM)
+                self.assertEqual(process.wait(timeout=3), 143)
+                time.sleep(1.1)
+                self.assertFalse(survived.exists(), 'A child continued after its task was interrupted')
 
 
 if __name__ == '__main__':

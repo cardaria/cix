@@ -89,7 +89,10 @@ let
     runtimeInputs = with pkgs; [
       backup
       coreutils
+      gawk
       git
+      gnugrep
+      gnused
       hostname
       jq
       less
