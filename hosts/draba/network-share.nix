@@ -35,6 +35,8 @@
       "_netdev"
       "nofail"
       "x-systemd.mount-timeout=10s"
+      # Mounted on first access, so it can't lose the race with the network at boot; a failure retries next time
+      "x-systemd.automount"
     ];
   };
 }
