@@ -151,7 +151,7 @@ changes_by_size() {
 }
 
 all_changes() {
-  section "All changes"
+  section "All changes ()"
   changes_by_size | LC_ALL=C sort -t $'\t' -k2,2 | while IFS=$'\t' read -r _ name ver; do item "$name" "$ver"; done
   echo
 }
@@ -230,7 +230,7 @@ if ((total == 0)); then
   note "Same package versions; configuration only"
 else
   changes_by_size | head -n 8 | while IFS=$'\t' read -r _ name ver; do item "$name" "$ver"; done
-  ((total <= 8)) || note "… $((total - 8)) more, largest first above"
+  ((total <= 8)) || note "… $((total - 8)) more · c at the question lists them all"
 fi
 if $dry; then
   echo

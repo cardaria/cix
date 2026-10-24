@@ -385,7 +385,7 @@ show_changes() {
   total=$(wc -l < "$file")
   while IFS=$'\t' read -r name ver flag; do
     if ((limit && n == limit)); then
-      note "  … $((total - limit)) more"
+      note "  … $((total - limit)) more · c at the question lists them all"
       break
     fi
     item "$name" "$ver${flag:+  ${ui_bold}$flag${ui_off}}"

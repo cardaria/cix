@@ -40,7 +40,7 @@ check the applications and both `systemctl --failed` and
 - `--cuda` additionally updates the deliberately separate CUDA pin.
 - `--verbose` streams every command's full output; by default each step shows a spinner, then one
   line, and keeps its output in the run's log (shown when a step fails).
-- At a question, `c` lists every change, then asks again.
+- At a question, `c` opens every change in a full-screen pager (arrows or Page Up/Down to scroll, `q` to go back), then asks again.
 - The commands work on `<reposDir>/cix` and `<reposDir>/pve`; `reposDir` is the Home Manager option
   `cix.reposDir` (default `~/Repos`), so a checkout elsewhere is one line.
 

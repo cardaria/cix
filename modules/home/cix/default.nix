@@ -73,6 +73,7 @@ let
       gnugrep
       gnused
       jq
+      less
       nix
       nixos-rebuild
       openssh
@@ -90,6 +91,7 @@ let
       git
       hostname
       jq
+      less
       nix
       nixos-rebuild
       updatePve

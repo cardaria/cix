@@ -76,6 +76,17 @@ ui_cleanup() {
   ui_show
 }
 
+# Shows what a function prints in a full-screen pager (arrows or Page Up/Down to scroll, q to go back); plain when not a terminal
+view() {
+  if [[ -t 1 ]]; then
+    ui_show
+    { "$@" | less -R -P "All changes  ·  arrows and Page Up/Down scroll  ·  q goes back"; } || true
+    ui_hide
+  else
+    "$@"
+  fi
+}
+
 # y or yes is yes; the more key runs a function that shows more, then asks again; anything else is no
 ask() {
   local question=$1 key=${2:-} more=${3:-} reply
@@ -87,7 +98,7 @@ ask() {
       y | yes) return 0 ;;
       "${key%% *}")
         [[ -n $key && -n $more ]] || return 1
-        "$more"
+        view "$more"
         ;;
       *) return 1 ;;
     esac
