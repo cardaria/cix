@@ -161,6 +161,10 @@ healthy() {
   tries=$(((seconds + 9) / 10))
   for ((i = 1; ; i++)); do
     failing=$(failing_checks)
+    # Checks that already failed before the update, and the user accepted, are not this deploy's fault
+    if [[ -s $run/baseline ]]; then
+      failing=$(grep -vxFf "$run/baseline" <<< "$failing" || true)
+    fi
     units=
     if [[ -n $address ]]; then
       units=$(failed_units "$address") || units="(no answer over SSH)"
@@ -262,8 +266,9 @@ preflight() {
     units=$(failed_units "$(field "$g" address)") || { echo "$g does not answer over SSH"; return 1; }
     [[ -z $units ]] || { printf 'Failed units on %s; fix them first:\n%s\n' "$g" "$units"; return 1; }
   done
-  # An unhealthy start hides what the update breaks
-  healthy 30 || { echo "Something is already unhealthy; fix it first."; return 1; }
+  # A failing check is reported, not decided here: a service this very update adds fails until it is deployed
+  : > "$run/baseline"
+  failing_checks > "$run/baseline"
 }
 
 bump_all() {
@@ -423,6 +428,11 @@ all_changes() {
   echo
 }
 
+# "1 guest", "2 guests"
+count_guests() {
+  if (($1 == 1)); then echo "1 guest"; else echo "$1 guests"; fi
+}
+
 # --- Run ---
 
 phase=plan
@@ -432,7 +442,15 @@ section "cix update $target"
 
 phase=preflight
 task "Health" "$run/health.log" preflight
-mark_ok "Health" "${#targets[@]} guests, every check passes"
+if [[ -s $run/baseline ]]; then
+  mark_fail "Health" "$(wc -l < "$run/baseline") checks already fail, before anything is changed"
+  while IFS= read -r name; do item "$name" "fails now"; done < "$run/baseline"
+  note "A service this update adds fails until its guest is deployed. A real outage is not fixed by an update."
+  ask "Continue anyway?" || exit 1
+  mark_ok "Health" "no failed units; those checks are not held against this update"
+else
+  mark_ok "Health" "$(count_guests "${#targets[@]}"), every check passes"
+fi
 
 : > "$run/images.tsv"
 if $update; then
@@ -483,7 +501,7 @@ mark_ok "Checks" "passed"
 
 phase=build
 task "Build" "$run/build.log" build_all
-mark_ok "Build" "${#targets[@]} guests"
+mark_ok "Build" "$(count_guests "${#targets[@]}")"
 
 phase=review
 task "Compare" "$run/compare.log" compare_all
@@ -516,7 +534,7 @@ fi
 
 section "Deploy"
 note "Order: $(printf '%s → ' "${changed[@]}" | sed 's/ → $//'). Each passes its checks before the next starts."
-ask "Deploy to ${#changed[@]} guests?" "c all changes" all_changes || {
+ask "Deploy to $(count_guests "${#changed[@]}")?" "c all changes" all_changes || {
   note "Nothing was deployed. To deploy this review later: cix update $target --no-update"
   exit 0
 }
@@ -526,7 +544,7 @@ phase=download
 ui_status=$run/download.status
 task "Download" "$run/download.log" download_all
 ui_status=
-mark_ok "Download" "${#changed[@]} guests ready"
+mark_ok "Download" "$(count_guests "${#changed[@]}") ready"
 
 phase=deploy
 for g in "${changed[@]}"; do

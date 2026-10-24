@@ -187,8 +187,9 @@ Runs from `draba` against the private pve repo (`~/Repos/pve`), which declares t
 registry: machines, services, health checks and update settings. A new guest needs no change here.
 In order:
 
-1. **Health first.** Every health check in the registry passes, and no target has a failed unit.
-   Otherwise it stops: an unhealthy start hides what the update breaks.
+1. **Health first.** No target may have a failed unit, or it stops. A health check that already fails is
+   listed and you decide whether to continue: a service this update adds fails until its guest is
+   deployed. Checks you accept that way are not held against the deploy.
 2. **Inputs and images.** It moves that repo's `nixpkgs-stable` (the NixOS base) and `nixpkgs-pve`
    (the apps), then follows each pinned container image's tag to its current digest and moves the pin.
 3. **Checks and builds** from one snapshot of the tree, like `cix update draba`.

@@ -130,7 +130,7 @@ elif name == 'skopeo':
     else:
         raise AssertionError(args)
 elif name == 'curl':
-    unhealthy = 'unhealthy' in fail or broken()
+    unhealthy = 'unhealthy' in fail or broken() or any(f.startswith('down:') and f[5:] in args[-1] for f in fail)
     print('000' if unhealthy else '200', end='')
     sys.exit(7 if unhealthy else 0)
 elif name == 'dig':
@@ -273,12 +273,17 @@ class UpdatePve(unittest.TestCase):
         self.assertIn('1 update · apt full-upgrade', self.output)
         self.assertIn('you update it yourself', self.output)
 
-    def test_unhealthy_start_is_refused(self):
-        self.assertNotEqual(self.run_update(fail='unhealthy'), 0)
-        self.assertIn('already unhealthy', self.output)
-        self.assertIn('Failing checks: player site', self.output)
+    def test_failing_checks_at_start_are_declined(self):
+        self.assertNotEqual(self.run_update(reply='n\n', fail='unhealthy'), 0)
+        self.assertIn('checks already fail', self.output)
+        self.assertRegex(self.output, r'player +fails now')
         self.assertFalse(any(c[:3] == ['nix', 'flake', 'update'] for c in self.calls))
         self.assertEqual(self.deploys(), [])
+
+    def test_failing_check_can_be_accepted_and_does_not_block_the_deploy(self):
+        self.assertEqual(self.run_update(reply='y\ny\n', fail='down:32400'), 0, self.output)
+        self.assertEqual(len(self.deploys()), 5)
+        self.assertIn('not held against this update', self.output)
 
     def test_failed_unit_at_start_is_refused(self):
         self.assertNotEqual(self.run_update(fail='units:watch'), 0)
