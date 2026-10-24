@@ -32,12 +32,15 @@ let
     name = "spotify";
     runtimeInputs = [
       pkgs.coreutils
+      pkgs.util-linux
       spicetify-cli
     ];
     text = ''
+      exec 9>"''${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/cix-spotify.lock"
+      flock 9
       store=${spotify}/share/spotify
       stamp="$store ${spicetify-cli} ${marketplace} ${marketplaceTheme} ${adblock}"
-      app="''${XDG_DATA_HOME:-$HOME/.local/share}/spotify-spicetify"
+      app="$HOME/.local/share/spotify-spicetify"
       # Home Manager can't link into the out-of-store spicetify directory; both are gitignored
       config="''${XDG_CONFIG_HOME:-$HOME/.config}/spicetify"
       mkdir -p "$config/CustomApps" "$config/Themes" "$config/Extensions"
@@ -56,6 +59,7 @@ let
         echo "$stamp" > "$app/.store"
       fi
 
+      exec 9>&-
       exec ${wrapper}/bin/spotify "$@"
     '';
   };

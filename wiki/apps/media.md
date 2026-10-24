@@ -2,7 +2,7 @@
 title: Media and documents
 category: apps
 tags: [anki, haruna, merkuro, okular, gwenview, elisa, plex, spotify, spicetify, mimeapps, signal, teamspeak, vesktop, fluxer, obsidian, steam, prismlauncher, minecraft]
-updated: 2026-10-20
+updated: 2026-10-24
 ---
 
 # Media and documents
@@ -83,6 +83,8 @@ Spicetify or Marketplace package changes, clears Spicetify's old backup, then ru
 can't patch it in place. Clearing matters: backing up an already-patched copy
 patches the JS twice and Spotify falls back to its built-in code, whose class
 names no longer match the patched CSS (the whole layout stacks vertically).
+Concurrent launchers serialize refresh and patching before starting Spotify. The copy uses
+`~/.local/share/spotify-spicetify`, matching the native Spicetify config and Spotify wrapper.
 The copy's `spotify` script is replaced with the wrapper, so restarts that
 Spicetify triggers also run the patched copy. Accounts and caches stay outside Git.
 
