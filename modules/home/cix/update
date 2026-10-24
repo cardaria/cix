@@ -92,7 +92,8 @@ guests() {
 host=$(hostname)
 if ((${#requested[@]} == 0)); then
   usage
-  printf '\nGuests on pve: %s\n' "$(guests | paste -sd ' ')"
+  known=$(guests)
+  printf '\nGuests on pve: %s\n' "$(paste -sd ' ' <<< "$known")"
   exit 0
 fi
 target=${requested[0]}

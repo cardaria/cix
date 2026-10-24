@@ -60,6 +60,9 @@ elif name == 'nix':
         assert '--no-update-lock-file' in args, args
         assert args[2] == str(root / 'store/source'), args
     elif args[0] == 'eval':
+        if fail == 'registry':
+            print('registry evaluation failed', file=sys.stderr)
+            sys.exit(42)
         print(json.dumps(['edge', 'gamma']))
     elif action == 'store diff-closures' and fail == 'many-changes':
         for i in range(4000):
@@ -246,6 +249,12 @@ class Update(unittest.TestCase):
     def test_unknown_target_is_refused(self):
         self.assertNotEqual(self.run_update(target='nonsense'), 0)
         self.assertIn("unknown target 'nonsense'", self.output)
+        self.changed_nothing()
+
+    def test_no_target_registry_failure_is_reported(self):
+        self.assertNotEqual(self.run_update(target=None, fail='registry'), 0)
+        self.assertIn('registry evaluation failed', self.output)
+        self.assertNotIn('Guests on pve:', self.output)
         self.changed_nothing()
 
     def test_guest_targets_go_to_the_pve_update(self):

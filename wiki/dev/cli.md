@@ -15,6 +15,12 @@ cix --help
 cix llm --help
 ```
 
+## Contents
+
+- [Commands](#commands) · [Updates](#updating-safely) · [Rollbacks](#rolling-back)
+- [Repository backups](#repository-backups) · [Adding a command](#adding-a-command)
+- [Internal helpers](#not-part-of-the-cli) · [Troubleshooting](#troubleshooting)
+
 ## Commands
 
 | Command | Does | Details |
@@ -167,3 +173,14 @@ is no).
 `cix-llm-worker` and `cix-ocr-worker` are fixed entrypoints for the GPU
 group and never run by hand ([GPU access](../architecture/gpu-access.md)).
 `cix-desktop-gpu` is a boot-time helper for KWin and Plex.
+
+## Troubleshooting
+
+- **Target listing fails:** the private registry must evaluate even for a list;
+  inspect the reported Nix error before retrying.
+- **An update fails:** use the retained log and recovery command; see
+  [Deployment](../deployment.md#troubleshooting) before another activation.
+
+## Related
+
+[Deployment](../deployment.md) · [Secrets](../security/secrets.md) · [Local LLM](local-llm.md)
