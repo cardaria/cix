@@ -2,7 +2,7 @@
 title: Plasma
 category: desktop
 tags: [plasma, kwin, krohnkite, plasma-manager, shortcuts, scaling, gpu]
-updated: 2026-10-22
+updated: 2026-10-24
 ---
 
 # Plasma
@@ -16,6 +16,7 @@ else stays in Plasma's own GUI.
 
 - [Where things are](#where-things-are) · [Apps](#apps)
 - [Tiling](#tiling-krohnkite)
+- [App placement](#app-placement)
 - [Shortcuts](#shortcuts)
 - [Panel](#panel)
 - [Display and scaling](#display-and-scaling)
@@ -104,6 +105,28 @@ Other settings stay in System Settings → Window Management → KWin Scripts
 settings or activating a rebuilt configuration, log out and back in so
 Krohnkite reads the new values. Avoid toggling the script off and on:
 upstream warns that it can start duplicate instances.
+
+## App placement
+
+1Password opens floating by default through Krohnkite's `floatingClass`.
+`Meta+Space` still toggles floating for the focused window.
+
+Spotify, Fluxer, Vesktop and Signal are forced onto desktop 4 by a native
+KWin window rule, including when reopened from the tray on another desktop.
+They cannot be moved to a different desktop while this rule is enabled.
+Krohnkite continues tiling them normally on desktop 4.
+
+The rule is declared in `plasma.nix` as the `cix-desktop-four` group in
+`kwinrulesrc`, using plasma-manager's stable `Desktop_4` ID. The pinned
+plasma-manager window-rules option writes a legacy rule list that makes
+KWin 6.8 discard other rule groups, so this declaration adds only its own
+group and preserves existing GUI rules. Edit the declaration to change the
+placement, or add `Enabled = false` to disable it. GUI edits to its managed
+keys are overwritten on activation.
+
+After building and switching, log out and back in to load both changes.
+From desktop 1, open each app and check that it appears on desktop 4;
+also close a chat app to its tray and reopen it from desktop 1.
 
 ## Shortcuts
 
