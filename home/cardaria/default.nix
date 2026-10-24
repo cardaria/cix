@@ -28,7 +28,7 @@
 
   # Absolute string on purpose: a Nix path would copy dotfiles into the store
   _module.args.dotfile =
-    path: config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/Repos/cix/dotfiles/${path}";
+    path: config.lib.file.mkOutOfStoreSymlink "${config.cix.reposDir}/cix/dotfiles/${path}";
 
   home.username = "cardaria";
   home.homeDirectory = "/home/cardaria";

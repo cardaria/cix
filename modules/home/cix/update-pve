@@ -554,4 +554,25 @@ done
 
 phase=complete
 section "Done"
-note "Updated ${changed[*]}. Commit flake.lock and the image pins in ${REPO/#$HOME/\~}."
+mark_ok "Guests" "${#changed[@]} updated, every check passes"
+
+# What the update changed in the repo: the lock file, and the files holding the moved image pins
+recorded=()
+while IFS= read -r file; do
+  [[ -z $(git status --short -- "$file") ]] || recorded+=("$file")
+done < <({ echo flake.lock; git diff --name-only | while IFS= read -r f; do git diff -U0 -- "$f" | grep -q '^[-+].*@sha256:' && echo "$f"; done; } | sort -u)
+if ((${#recorded[@]} == 0)); then
+  note "Nothing to commit in ${REPO/#$HOME/\~}"
+  exit 0
+fi
+section "Record this update"
+for file in "${recorded[@]}"; do
+  if [[ $file == flake.lock ]]; then item "$file" "package versions"; else item "$file" "image pins"; fi
+done
+if ask "Commit them, so the repo matches what the servers run?"; then
+  git add -- "${recorded[@]}"
+  git commit -q -m "chore(flake): update the guests on pve" -- "${recorded[@]}"
+  mark_ok "Committed" "chore(flake): update the guests on pve · not pushed"
+else
+  note "Left uncommitted in ${REPO/#$HOME/\~}"
+fi

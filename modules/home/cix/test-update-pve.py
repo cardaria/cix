@@ -215,7 +215,7 @@ class UpdatePve(unittest.TestCase):
         self.assertEqual(self.deploys(), [GUESTS[g][0] for g in order])
         for guest in order:
             self.assertEqual(self.running(guest), f'{guest}-new')
-        self.assertIn('Updated alpha beta gamma watch edge', self.output)
+        self.assertIn('5 updated, every check passes', self.output)
 
     def test_everything_lands_before_the_first_deploy(self):
         self.run_update()
@@ -303,6 +303,32 @@ class UpdatePve(unittest.TestCase):
         self.assertEqual(self.running('edge'), 'edge-old')
         self.assertIn('back on its previous build and healthy', self.output)
         self.assertNotIn('Return it to the one it ran before', self.output)
+
+    def commits(self):
+        return self.git('log', '--format=%s').splitlines()
+
+    def test_the_update_can_be_committed(self):
+        self.git('config', 'user.name', 'Test')
+        self.git('config', 'user.email', 'test@example.invalid')
+        (self.repo / 'notes.txt').write_text('unrelated\n')
+        self.git('add', 'notes.txt')
+        self.assertEqual(self.run_update(reply='y\ny\ny\n'), 0, self.output)
+        self.assertEqual(self.commits()[0], 'chore(flake): update the guests on pve')
+        committed = set(self.git('show', '--name-only', '--format=', 'HEAD').split())
+        self.assertEqual(committed, {'flake.lock', 'hosts/alpha.nix', 'hosts/gamma.nix'})
+        self.assertIn('notes.txt', self.git('diff', '--cached', '--name-only'))
+        self.assertIn('not pushed', self.output)
+
+    def test_declining_leaves_the_update_uncommitted(self):
+        before = self.commits()
+        self.assertEqual(self.run_update(reply='y\nn\n'), 0, self.output)
+        self.assertEqual(self.commits(), before)
+        self.assertIn('Left uncommitted', self.output)
+        self.assertIn('flake.lock', self.git('status', '--short'))
+
+    def test_nothing_to_commit(self):
+        self.assertEqual(self.run_update('pve', '--no-update', reply='y\n'), 0, self.output)
+        self.assertIn('Nothing to commit', self.output)
 
     def test_up_to_date(self):
         self.assertEqual(self.run_update('pve', '--no-update', fail='same'), 0, self.output)

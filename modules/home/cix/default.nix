@@ -7,6 +7,8 @@
 }:
 let
   commands = config.cix.commands;
+  cixDir = "${config.cix.reposDir}/cix";
+  pveDir = "${config.cix.reposDir}/pve";
   names = lib.attrNames commands;
   width = lib.foldl' lib.max 0 (map lib.stringLength names);
   usage = pkgs.writeText "cix-usage" ''
@@ -56,7 +58,7 @@ let
       jq
       openssh
     ];
-    runtimeEnv.REPO = "${config.home.homeDirectory}/Repos/cix";
+    runtimeEnv.REPO = cixDir;
     text = ui + builtins.readFile ./backup;
   };
   # The guests of the pve repo: cix update hands those targets to it
@@ -77,7 +79,7 @@ let
       skopeo
       util-linux
     ];
-    runtimeEnv.REPO = "${config.home.homeDirectory}/Repos/pve";
+    runtimeEnv.REPO = pveDir;
     text = steps + builtins.readFile ./update-pve;
   };
   update = pkgs.writeShellApplication {
@@ -94,14 +96,20 @@ let
       util-linux
     ];
     runtimeEnv = {
-      REPO = "${config.home.homeDirectory}/Repos/cix";
-      PVE = "${config.home.homeDirectory}/Repos/pve";
+      REPO = cixDir;
+      PVE = pveDir;
     };
     text = steps + builtins.readFile ./update;
   };
   repos = import ./repos-package.nix { inherit pkgs; };
 in
 {
+  options.cix.reposDir = lib.mkOption {
+    type = lib.types.str;
+    default = "${config.home.homeDirectory}/Repos";
+    description = "The folder holding the cix and pve checkouts; the cix commands work on <reposDir>/cix and <reposDir>/pve.";
+  };
+
   options.cix.commands = lib.mkOption {
     type = lib.types.attrsOf (
       lib.types.submodule {

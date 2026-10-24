@@ -209,8 +209,9 @@ In order:
 | `--no-images` | leave the container pins as they are |
 
 The inputs are shared: `cix update <guest>` moves them for every guest, and the others take them at
-their next deploy. A guest whose containers are `self-managed` is only reported. When the run is
-done, commit `flake.lock` and the pins in the pve repo.
+their next deploy. A guest whose containers are `self-managed` is only reported. At the end it lists
+the files the update changed in the pve repo (`flake.lock` and the files with moved image pins) and offers to
+commit exactly those, as `chore(flake): update the guests on pve`; it never pushes.
 
 ## Save to GitHub
 
