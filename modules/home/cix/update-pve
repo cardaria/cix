@@ -318,7 +318,8 @@ download_all() {
   local g address image
   for g in "${changed[@]}"; do
     address=$(field "$g" address)
-    nix copy --to "ssh-ng://root@$address" "$(readlink -e "$run/$g")"
+    # Our own build, over key-authenticated SSH as root: the guest has no key to check its signature against
+    nix copy --no-check-sigs --to "ssh-ng://root@$address" "$(readlink -e "$run/$g")"
     while read -r image; do
       remote "$address" docker image inspect "$image" > /dev/null 2>&1 ||
         remote "$address" docker pull -q "$image"
