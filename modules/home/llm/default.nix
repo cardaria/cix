@@ -119,6 +119,7 @@ let
       gnugrep
       jq
       systemd
+      util-linux
     ];
     runtimeEnv = {
       ENDPOINT = "http://${endpoint}";

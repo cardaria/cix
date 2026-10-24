@@ -58,6 +58,7 @@ let
       hostname
       jq
       openssh
+      util-linux
     ];
     runtimeEnv.REPO = cixDir;
     text = ui + builtins.readFile ./backup;

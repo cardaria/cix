@@ -129,11 +129,16 @@
                 pkgs.coreutils
                 pkgs.util-linux
                 pkgs.jq
+                pkgs.age
+                pkgs.openssh
+                pkgs.gnugrep
+                pkgs.hostname
               ];
             }
             ''
               python ${./modules/home/cix}/test-update.py
               python ${./modules/home/cix}/test-update-pve.py
+              python ${self}/modules/home/cix/test-maintenance.py
               touch "$out"
             '';
         docs-sources =

@@ -40,6 +40,8 @@ items=(
 # Public keys of verified backups, so --auto can skip 1Password
 state=${XDG_STATE_HOME:-$HOME/.local/state}/cix/backups
 mkdir -p "${state%/*}"
+exec 9>"$state.lock"
+flock 9
 touch "$state"
 
 key() {
@@ -57,9 +59,14 @@ derive() {
 if $auto; then
   pending=()
   for item in "${items[@]}"; do
-    IFS='|' read -r title _ private public <<< "$item"
-    [[ -f $private && -f $public ]] || continue
-    grep -qxF "$title|$(key "$public")" "$state" || pending+=("$item")
+    IFS='|' read -r title kind private public <<< "$item"
+    if [[ ! -f $private || ! -f $public ]] ||
+       ! want=$(key "$public") || [[ -z $want ]] ||
+       ! local_key=$(derive "$kind" < "$private") || [[ $local_key != "$want" ]]; then
+      pending+=("$item")
+      continue
+    fi
+    grep -qxF "$title|$want" "$state" || pending+=("$item")
   done
   ((${#pending[@]})) || exit 0
   items=("${pending[@]}")
@@ -77,10 +84,16 @@ status=0
 for item in "${items[@]}"; do
   IFS='|' read -r title kind private public <<< "$item"
   if [[ ! -f $private || ! -f $public ]]; then
-    row "no key" "$title"
+    row "no key" "$title: private or public key is missing"
+    status=1
     continue
   fi
-  want=$(key "$public")
+  if ! want=$(key "$public") || [[ -z $want ]] ||
+     ! local_key=$(derive "$kind" < "$private") || [[ $local_key != "$want" ]]; then
+    row mismatch "$title: local private and public keys do not match"
+    status=1
+    continue
+  fi
   count=$(jq --arg t "$title" '[.[] | select(.title == $t)] | length' <<< "$documents")
 
   if ((count > 1)); then
@@ -97,7 +110,7 @@ for item in "${items[@]}"; do
     op document create "$private" --title "$title" --vault Personal > /dev/null
   fi
 
-  if [[ $(op document get "$title" | derive "$kind") == "$want" ]]; then
+  if actual=$(op document get "$title" | derive "$kind") && [[ -n $actual && $actual == "$want" ]]; then
     row verified "$title"
     { grep -vF "$title|" "$state" || true; echo "$title|$want"; } > "$state.new"
     mv "$state.new" "$state"

@@ -2,7 +2,7 @@
 title: Local LLM
 category: dev
 tags: [llm, opencode, ninfer, llama-swap, qwen, cuda, rtx-5090]
-updated: 2026-10-13
+updated: 2026-10-24
 ---
 
 # Local LLM
@@ -105,7 +105,8 @@ systemctl --user status llama-swap
 `llm/models` and `ocr/models`, both created at login.
 It is outside the repo on purpose. Git tracks how each model is used and
 which exact file it is (Hugging Face repo, revision, SHA-256 in the module),
-never the weights. On a fresh install, run `cix llm fetch` (22 GiB).
+never the weights. On a fresh install, run `cix llm fetch` (22 GiB). Concurrent fetches wait for the same download lock;
+the final filename appears only after its hash matches.
 Chandra uses the sibling OCR folder; its locked model and CLI are documented
 in [Local OCR](local-ocr.md).
 

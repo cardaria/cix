@@ -131,12 +131,14 @@ tps() {
 
 fetch() {
   local target=$MODEL_DIR/$MODEL_FILE
+  mkdir -p "$MODEL_DIR"
+  exec 9>"$target.lock"
+  flock 9
   if [[ -f $target ]]; then
     echo "Verifying $target"
     printf '%s  %s\n' "$MODEL_SHA256" "$target" | sha256sum --check
     return
   fi
-  mkdir -p "$MODEL_DIR"
   # Resumable; the file only gets its final name after the hash matches
   curl -fL --retry 5 -C - -o "$target.part" \
     "https://huggingface.co/$MODEL_REPO/resolve/$MODEL_REV/$MODEL_FILE"

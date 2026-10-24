@@ -56,7 +56,7 @@ exact Disko version that matches the layout.
 | Check | Verifies |
 | --- | --- |
 | `formatting` | every `.nix` file is `nixfmt`-clean |
-| `cix-update` | update workflow confirmations, failure recovery, concurrency and specialisation handling with isolated command mocks |
+| `cix-update` | update confirmations, failure recovery, interruptions and specialisation handling with isolated command mocks; backup verification and repository retention with disposable age/SSH keys and Git repositories; model-fetch concurrency |
 | `docs-sources` | wiki frontmatter is valid, `wiki/_sources.yaml` covers every module and only existing paths, and docs contain no IPv4 addresses |
 
 ```sh

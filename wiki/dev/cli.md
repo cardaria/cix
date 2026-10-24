@@ -124,7 +124,7 @@ after showing each destination; the Proxmox host itself is never rolled back.
 ## Repository backups
 
 `cix repos backup` keeps a bare mirror of every GitHub repository of the account (forks excluded; the list
-comes from GitHub, so repositories that are not cloned here are included) in `~/Shares/Cloud/Backups/git`,
+comes from GitHub with pagination, so repositories that are not cloned here are included) in `~/Shares/Cloud/Backups/git`,
 then pushes branches and tags to GitLab, where a missing project is created as a **private** one. The nightly
 run is the job of the server, which is always on (the private pve repo describes it); this command is the
 manual version (for example right after pushing). `cix repos status` shows the last run and
@@ -132,12 +132,13 @@ the age of each mirror.
 
 - **Two copies, two reasons.** GitLab protects against losing the GitHub account; the mirrors on the share are
   copied by the share's rsync jobs to two more disks with seven days of history.
-- **History is never lost.** The mirrors keep every ref update (`core.logAllRefUpdates`) and never delete an
-  object (`gc.auto = 0`), so a bad force-push on GitHub can be undone from the mirror. Only GitLab's branches
-  are pruned to match.
+- **Retain upstream history.** The mirrors record ref updates (`core.logAllRefUpdates`) and disable
+  automatic garbage collection (`gc.auto = 0`), so a bad force-push can be recovered from retained mirror history. GitLab's branches and tags
+  follow the retained local refs, including refs deleted upstream. Manual garbage collection
+  can still remove expired unreachable history; the backup command never runs it.
 - **Only pushed work is backed up.** Commits that exist only on this machine are not on GitHub, so push first.
 - It refuses to run when the share is not mounted, so it never fills the local disk. It needs `gh` logged in
-  and an SSH key known to GitLab. A failing repository shows on the screen and the command exits 1. A lock stops a manual run from overlapping the nightly one,
+  and an SSH key known to GitLab. A failing repository shows on the screen and the command exits 1; unknown requested names are refused before any mirror changes. A lock stops a manual run from overlapping the nightly one,
   and with `HEALTHCHECKS_URL` set a full run reports to healthchecks.io.
 
 ## Adding a command

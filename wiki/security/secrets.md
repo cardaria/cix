@@ -29,7 +29,7 @@ The root copy is used because it is readable during early activation, before
 cd ~/Repos/cix/secrets
 umask 077
 EDITOR=nano TMPDIR="$XDG_RUNTIME_DIR" \
-  nix run ..#agenix -- -e smb-cloud.age -i "$HOME/.config/agenix/identity.txt"
+  nix run ..#agenix -- -e codex-lb.age -i "$HOME/.config/agenix/identity.txt"
 ```
 
 Saving re-encrypts. The plaintext temp file stays in the RAM-backed runtime dir.
@@ -64,11 +64,12 @@ Each host's recovery keys are 1Password **Documents** in the `Personal` vault:
 
 `cix backup` uploads a missing one after asking, and verifies each copy by
 deriving its public key from the downloaded document, so no second plaintext
-copy lands on disk. It never overwrites an item: a mismatch or a duplicate
+copy lands on disk. Local private/public key mismatches and failed downloads cannot be marked verified.
+Concurrent runs wait for one backup lock. It never overwrites an item: a mismatch or a duplicate
 title is reported for you to resolve in 1Password. `cix backup --check`
 uploads nothing. Verified public keys are remembered in
-`~/.local/state/cix/backups`, so `cix update draba` (which runs `cix backup --auto`)
-only reaches 1Password when a key is new or changed. The 1Password CLI can't
+`~/.local/state/cix/backups`, so `cix update draba` (which runs `cix backup --auto --check`)
+only reaches 1Password when a key is new or changed; this cache is not a fresh check that the remote item still exists. The 1Password CLI can't
 import an existing key as an SSH Key item, hence Documents.
 
 To verify the agenix copy by hand:

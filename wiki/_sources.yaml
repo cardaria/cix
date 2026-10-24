@@ -119,6 +119,7 @@ dev/cli.md:
     - modules/home/cix/steps.sh
     - modules/home/cix/generations.sh
     - modules/home/cix/test-update-pve.py
+    - modules/home/cix/test-maintenance.py
     - modules/home/cix/backup
     - modules/home/cix/repos
     - modules/home/cix/repos-package.nix

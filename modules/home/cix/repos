@@ -98,11 +98,21 @@ backup() {
   fi
 
   local list
-  list=$(retry gh repo list "$owner" --limit 200 --source \
-    --json name,sshUrl,url,visibility \
-    --jq ".[] | [.name, .$url_field, .visibility] | @tsv") \
+  # shellcheck disable=SC2016
+  list=$(retry gh api graphql --paginate -F owner="$owner" -f query='
+    query($owner: String!, $endCursor: String) {
+      repositoryOwner(login: $owner) {
+        repositories(first: 100, after: $endCursor, isFork: false) {
+          nodes { name sshUrl url visibility }
+          pageInfo { hasNextPage endCursor }
+        }
+      }
+    }' --jq ".data.repositoryOwner.repositories.nodes[] | [.name, .$url_field, .visibility] | @tsv") \
     || die "could not list the repositories of $owner (is gh logged in?)"
   [[ -n $list ]] || die "GitHub returned no repositories"
+  for arg in "${only[@]}"; do
+    cut -f1 <<<"$list" | grep -qxF -- "$arg" || die "unknown repository $arg"
+  done
 
   local rows ok=0 failed=0 row name url vis mirror log
   mapfile -t rows <<<"$list"
@@ -112,14 +122,17 @@ backup() {
   $quiet || step "Mirrors in $dest"
   for row in "${rows[@]}"; do
     IFS=$'\t' read -r name url vis <<<"$row"
-    if [[ ${#only[@]} -gt 0 ]] && ! printf '%s\n' "${only[@]}" | grep -qx -- "$name"; then
+    if [[ ${#only[@]} -gt 0 ]] && ! printf '%s\n' "${only[@]}" | grep -qxF -- "$name"; then
       continue
     fi
     mirror=$dest/$name.git
     if [[ -d $mirror ]]; then
       # The mirror may have been made over the other protocol
       git -C "$mirror" remote set-url origin "$url"
-      retry github_git -C "$mirror" remote update --prune </dev/null >"$log" 2>&1 || {
+      git -C "$mirror" config core.logAllRefUpdates always
+      git -C "$mirror" config gc.auto 0
+      retry github_git -C "$mirror" -c fetch.prune=false -c remote.origin.prune=false \
+        remote update origin </dev/null >"$log" 2>&1 || {
         echo "FAILED  $name: could not update the mirror" >&2
         sed 's/^/        /' "$log" >&2
         failed=$((failed + 1))
