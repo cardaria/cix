@@ -136,7 +136,7 @@ in
     specialisation.display-5090.configuration = {
       boot.loader.grub.configurationName = lib.mkForce "RTX 5090";
       cix.displayGpu = "rtx5090";
-      # HDMI may not carry 160 Hz; set the rate once measured on this link
+      # Leave HDMI console refresh to mode selection
       cix.consoleMode = "3840x2160";
       system.nixos.tags = [ "display-5090" ];
     };

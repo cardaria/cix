@@ -49,8 +49,8 @@ sequenceDiagram
 - The greeter reads `/var/lib/plasmalogin/.config/kwinoutputconfig.json`, a
   store copy of `dotfiles/kwin/draba/kwinoutputconfig.json` declared in
   `hosts/draba/graphics.nix`: the saved mode and scale for each display connection.
-  DisplayPort uses 160 Hz at 150%; the saved HDMI setup differs. A display change made in the session reaches the greeter after the
-  next rebuild.
+  Both connections use 150% scale; DisplayPort uses 160 Hz and HDMI uses 144 Hz.
+  A display change made in the session reaches the greeter after the next rebuild.
 - With DisplayPort, the kernel console, greeter and session use
   160 Hz to avoid a mode switch between them
   ([draba](../architecture/draba.md#early-kms-and-console-mode)).

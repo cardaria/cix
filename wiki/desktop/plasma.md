@@ -124,9 +124,7 @@ group and preserves existing GUI rules. Edit the declaration to change the
 placement, or add `Enabled = false` to disable it. GUI edits to its managed
 keys are overwritten on activation.
 
-After building and switching, log out and back in to load both changes.
-From desktop 1, open each app and check that it appears on desktop 4;
-also close a chat app to its tray and reopen it from desktop 1.
+Log out and back in after activation to load the placement rule.
 
 ## Shortcuts
 
@@ -169,11 +167,11 @@ choices and rebuild behavior: [Preferences](preferences.md#panel).
 
 ## Display and scaling
 
-On DisplayPort the LG monitor runs at 3840×2160, 160 Hz, scale 150%, with KWin's own
-fractional scaling. Wayland clients (Qt, GTK 4, Chromium/Electron) render at
+The LG monitor uses 150% KWin fractional scaling on both DisplayPort and HDMI.
+The saved modes are 3840×2160 at 160 Hz over DisplayPort and 144 Hz over HDMI.
+Wayland clients (Qt, GTK 4, Chromium/Electron) render at
 1.5× natively; X11 clients follow System Settings → Display → Legacy
 Applications. No app has its own scale flag or variable.
-The saved HDMI profile differs; see [draba](../architecture/draba.md#invariants).
 
 - `~/.config/kwinoutputconfig.json` is a live link to
   `dotfiles/kwin/draba/kwinoutputconfig.json`. KWin writes display changes

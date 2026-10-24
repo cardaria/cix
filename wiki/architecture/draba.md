@@ -10,6 +10,13 @@ updated: 2026-10-24
 The workstation itself: an AMD desktop with two GPUs that have separate jobs,
 and a dual-boot disk layout.
 
+## Contents
+
+- [Hardware](#hardware) · [Invariants](#invariants)
+- [GPUs](#two-gpus-two-jobs) · [Storage](#storage-disko)
+- [Kernel](#kernel-and-modules) · [Locale](#locale) · [Input](#input-devices)
+- [After a reboot](#after-a-reboot) · [Troubleshooting](#troubleshooting)
+
 ## Hardware
 
 | Part | Detail | Owned by |
@@ -32,12 +39,9 @@ Don't change these without the user asking:
 - From `display-5090`, never activate the base closure (`test`/`switch`); activate
   `<out>/specialisation/display-5090` instead. The base moves the desktop to the
   5060 under the running session and leaves a dead screen.
-- The UI size is 150%, set only by KWin's fractional scale.
+- The UI size is 150% on both DisplayPort and HDMI, set only by KWin's fractional scale.
 - Disko owns only the disk in `hosts/draba/storage.nix`; the Windows disk is never touched.
 - GRUB keeps the Windows entry (os-prober) and `configurationLimit = 4` for the 1 GB ESP.
-
-The saved HDMI profile currently uses about 144 Hz and 145% scale, differing from the
-150% preference above. Confirm that preference before changing the live display configuration.
 
 ## Two GPUs, two jobs
 
@@ -67,7 +71,7 @@ The saved HDMI profile currently uses about 144 Hz and 145% scale, differing fro
   ([GPU access](gpu-access.md)) is off, because KWin must open the card behind the
   screen. LLM and OCR still pin the 5090 by UUID. The 5060 idles. Both entries
   share one kernel and initrd, so the 1 GB ESP is not doubled. The console mode
-  (`cix.consoleMode`) is `3840x2160` there until the HDMI refresh rate is measured.
+  (`cix.consoleMode`) is `3840x2160` there, without a forced refresh rate.
 - The 5060's slot hangs off the second chipset chip and is wired **PCIe 3.0 ×2**
   (≈2 GB/s), shared upstream with the Windows SSD, Wi-Fi, NIC and USB. The
   Gen 4 ×8 slot would sit under the 5090's fans. The desktop runs fine, but
