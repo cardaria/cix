@@ -116,6 +116,7 @@ dev/cli.md:
     - modules/home/cix/update
     - modules/home/cix/test-update.py
     - modules/home/cix/update-pve
+    - modules/home/cix/steps.sh
     - modules/home/cix/test-update-pve.py
     - modules/home/cix/backup
     - modules/home/cix/repos

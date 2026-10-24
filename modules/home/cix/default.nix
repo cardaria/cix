@@ -43,6 +43,7 @@ let
     '';
   };
   ui = builtins.readFile ./ui.sh;
+  steps = builtins.readFile ./steps.sh;
   # op is left out on purpose: only the setgid wrapper reaches the desktop app
   backup = pkgs.writeShellApplication {
     name = "cix-backup";
@@ -77,7 +78,7 @@ let
       util-linux
     ];
     runtimeEnv.REPO = "${config.home.homeDirectory}/Repos/pve";
-    text = ui + builtins.readFile ./update-pve;
+    text = steps + builtins.readFile ./update-pve;
   };
   update = pkgs.writeShellApplication {
     name = "cix-update";
@@ -96,7 +97,7 @@ let
       REPO = "${config.home.homeDirectory}/Repos/cix";
       PVE = "${config.home.homeDirectory}/Repos/pve";
     };
-    text = ui + builtins.readFile ./update;
+    text = steps + builtins.readFile ./update;
   };
   repos = import ./repos-package.nix { inherit pkgs; };
 in

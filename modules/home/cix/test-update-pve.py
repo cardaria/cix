@@ -95,7 +95,7 @@ elif name == 'ssh':
     command = args[args.index('root@' + host) + 1:]
     guest = by_address.get(host)
     if host == registry['host']:
-        print('1 apt updates (apt full-upgrade)\nKernel 7.0 is the newest installed')
+        print('apt\t1 update · apt full-upgrade\nkernel\t7.0, the newest installed')
     elif command[:2] == ['systemctl', 'list-units']:
         if 'units:' + guest in fail:
             print('broken.service loaded failed failed Broken')
@@ -173,7 +173,7 @@ class UpdatePve(unittest.TestCase):
         mock.chmod(0o755)
         for name in ('nix', 'nix-store', 'ssh', 'nixos-rebuild', 'skopeo', 'curl', 'dig', 'timeout', 'sleep'):
             (bindir / name).symlink_to(mock)
-        script = (SOURCE / 'ui.sh').read_text() + (SOURCE / 'update-pve').read_text()
+        script = (SOURCE / 'steps.sh').read_text() + (SOURCE / 'update-pve').read_text()
         script = script.replace('/nix/store/', str(self.root / 'store') + '/')
         self.script = self.root / 'update-pve'
         self.script.write_text(script)
@@ -228,19 +228,19 @@ class UpdatePve(unittest.TestCase):
         self.assertEqual(self.run_update(), 0, self.output)
         self.assertIn(f'player:latest@{NEW}', self.pin('gamma'))
         self.assertIn(f'tool:latest@{NEW}', self.pin('alpha'))
-        self.assertIn('player: 1.43.4 → 1.43.5', self.output)
+        self.assertRegex(self.output, r'player +1\.43\.4 → 1\.43\.5')
         self.assertEqual(json.loads((self.repo / 'flake.lock').read_text())['nodes']['nixpkgs-pve']['locked']['rev'], '3' * 40)
 
     def test_package_changes_are_listed_and_major_jumps_flagged(self):
         self.run_update(fail='major', reply='n\n')
-        self.assertIn('player: 1.43.4 → 2.0.1  MAJOR', self.output)
+        self.assertRegex(self.output, r'player +1\.43\.4 → 2\.0\.1  major')
         self.assertIn('Major version jumps', self.output)
-        self.assertIn('gamma  player: 1.43.4 → 2.0.1', self.output)
+        self.assertRegex(self.output, r'gamma +player +1\.43\.4 → 2\.0\.1')
         self.assertNotIn('glibc', self.output)
 
     def test_uninformative_labels_show_the_digests(self):
         self.run_update('gamma', fail='samelabel', reply='n\n')
-        self.assertIn('player: latest aaaaaaaaaaaa → latest bbbbbbbbbbbb', self.output)
+        self.assertRegex(self.output, r'player +latest aaaaaaaaaaaa → latest bbbbbbbbbbbb')
 
     def test_dry_run_deploys_nothing(self):
         self.assertEqual(self.run_update('pve', '--dry-run'), 0, self.output)
@@ -268,7 +268,7 @@ class UpdatePve(unittest.TestCase):
 
     def test_host_is_reported_for_pve_only(self):
         self.run_update(reply='n\n')
-        self.assertIn('1 apt updates', self.output)
+        self.assertIn('1 update · apt full-upgrade', self.output)
         self.assertIn('you update it yourself', self.output)
 
     def test_unhealthy_start_is_refused(self):
@@ -338,7 +338,7 @@ class UpdatePve(unittest.TestCase):
     def test_unchanged_digest_leaves_the_pin(self):
         self.assertEqual(self.run_update('gamma', digest=OLD), 0, self.output)
         self.assertIn(OLD, self.pin('gamma'))
-        self.assertNotIn('image  player', self.output)
+        self.assertNotRegex(self.output, r'images\n +player')
 
     def stops_during(self, phase):
         self.assertNotEqual(self.run_update(fail=phase), 0)

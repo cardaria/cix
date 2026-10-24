@@ -13,6 +13,7 @@ for arg in "$@"; do
     -n | --dry-run) dry=true ;;
     --no-update) update=false ;;
     --no-images) images=false ;;
+    -v | --verbose) ui_verbose=true ;;
     *)
       echo "cix update $target: unknown option '$arg'. Run cix update --help." >&2
       exit 1
@@ -33,8 +34,9 @@ if [[ -n $untracked ]]; then
 fi
 changes=$(git status --short)
 if [[ -n $changes ]]; then
-  printf 'Working tree changes will be included:\n%s\n' "$changes"
-  confirm "Build with these changes?" || exit 1
+  section "Uncommitted changes in the pve repo"
+  while IFS= read -r line; do printf '  %s\n' "$line"; done <<< "$changes"
+  ask "Build with these changes?" || exit 1
 fi
 
 state=${XDG_STATE_HOME:-$HOME/.local/state}/cix/updates
@@ -47,27 +49,23 @@ previous=
 
 finish() {
   local status=$?
+  ui_cleanup
   if ((status)); then
-    printf '\nUpdate stopped during %s (status %s). Logs: %s\n' "$phase" "$status" "$run" >&2
+    printf '\n  Stopped during %s (status %s)\n' "$phase" "$status" >&2
     if [[ $phase == deploy && -n $previous ]]; then
-      echo "$guest may run the new build. Return it to the one it ran before with:" >&2
-      printf '  nixos-rebuild switch --store-path %q --target-host root@%s --no-reexec\n' "$previous" "$address" >&2
+      note "$guest may run the new build. Return it to the one it ran before with:" >&2
+      printf '    nixos-rebuild switch --store-path %q --target-host root@%s --no-reexec\n' "$previous" "$address" >&2
     fi
     if [[ $phase != plan && $phase != preflight ]]; then
-      echo "flake.lock and the image pins may have changed; review with git diff, retry with --no-update." >&2
+      note "flake.lock and the image pins may have changed; review with git diff, retry with --no-update" >&2
     fi
+    note "Log  ${run/#$HOME/\~}" >&2
   fi
 }
 trap finish EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 trap 'exit 129' HUP
-
-logged() {
-  local log=$1
-  shift
-  "$@" 2>&1 | tee -a "$run/$log.log"
-}
 
 # A guest's shell, as root with this machine's key
 remote() {
@@ -194,8 +192,8 @@ versions='
     for (n in seen) {
       o = sorted(old[n]); w = sorted(new[n])
       if (o == w) continue
-      flag = (o != "" && w != "" && o !~ /,/ && w !~ /,/ && major(o) != "" && major(w) != "" && major(o) != major(w)) ? "  MAJOR" : ""
-      printf "%s: %s → %s%s\n", n, o == "" ? "∅" : o, w == "" ? "∅" : w, flag
+      flag = (o != "" && w != "" && o !~ /,/ && w !~ /,/ && major(o) != "" && major(w) != "" && major(o) != major(w)) ? "major" : ""
+      printf "%s\t%s → %s\t%s\n", n, o == "" ? "∅" : o, w == "" ? "∅" : w, flag
     }
   }'
 
@@ -213,7 +211,7 @@ label() {
 
 # Follows a pinned image's tag to its current digest and moves the pin in the repo
 bump() {
-  local g=$1 container=$2 image=$3 ref name old new file count content from to flag=
+  local g=$1 container=$2 image=$3 ref name old new file count content from to flag=''
   ref=${image%@*}
   name=${ref%:*}
   old=${image#*@}
@@ -228,32 +226,167 @@ bump() {
   from=$(label "$name@$old")
   to=$(label "$name@$new")
   if [[ -n $(major "$from") && -n $(major "$to") && $(major "$from") != "$(major "$to")" ]]; then
-    flag="  MAJOR"
+    flag=major
   fi
   # A label like latest or main says nothing, so the digests tell the two apart
   if [[ -z $from || -z $to || $from == "$to" ]]; then
     from="${from:+$from }${old:7:12}"
     to="${to:+$to }${new:7:12}"
   fi
-  printf '%s\t%s: %s → %s%s\n' "$g" "$container" "$from" "$to" "$flag" >> "$run/images.tsv"
+  printf '%s\t%s\t%s → %s\t%s\n' "$g" "$container" "$from" "$to" "$flag" >> "$run/images.tsv"
 }
 
 lock_rev() {
-  jq -r --arg i "$1" '.nodes[$i].locked | "\(.rev[0:7]) (\(.lastModified | strftime("%Y-%m-%d")))"' flake.lock
+  jq -r --arg i "$1" '.nodes[$i].locked.rev // empty | .[0:7]' flake.lock
 }
 
 host_report() {
   local address
   address=$(jq -r '.host // empty' "$run/plan.json")
   [[ -n $address ]] || return 0
-  step "Proxmox host pve (you update it yourself)"
   # shellcheck disable=SC2016
   remote "$address" '
-    echo "$(apt-get -s -q dist-upgrade 2> /dev/null | grep -c "^Inst ") apt updates (apt full-upgrade)"
+    n=$(apt-get -s -q dist-upgrade 2> /dev/null | grep -c "^Inst ")
+    printf "apt\t%s update%s · apt full-upgrade\n" "$n" "$([ "$n" = 1 ] || echo s)"
     r=$(uname -r)
-    n=$(ls /boot/vmlinuz-* | sed "s|^/boot/vmlinuz-||" | sort -V | tail -n 1)
-    if [ "$r" = "$n" ]; then echo "Kernel $r is the newest installed"; else echo "Reboot pending: running $r, newest installed $n"; fi
-  ' || echo "No answer from the Proxmox host"
+    k=$(ls /boot/vmlinuz-* | sed "s|^/boot/vmlinuz-||" | sort -V | tail -n 1)
+    if [ "$r" = "$k" ]; then printf "kernel\t%s, the newest installed\n" "$r"; else printf "kernel\treboot pending: running %s, newest %s\n" "$r" "$k"; fi
+  ' > "$run/host.tsv" || printf 'host\tno answer over SSH\n' > "$run/host.tsv"
+}
+
+# --- Steps, each run by task with a spinner ---
+
+preflight() {
+  local g units
+  for g in "${targets[@]}"; do
+    units=$(failed_units "$(field "$g" address)") || { echo "$g does not answer over SSH"; return 1; }
+    [[ -z $units ]] || { printf 'Failed units on %s; fix them first:\n%s\n' "$g" "$units"; return 1; }
+  done
+  # An unhealthy start hides what the update breaks
+  healthy 30 || { echo "Something is already unhealthy; fix it first."; return 1; }
+}
+
+bump_all() {
+  local g container image
+  for g in "${targets[@]}"; do
+    [[ $(field "$g" containers) == pinned ]] || continue
+    while IFS=$'\t' read -r container image; do
+      bump "$g" "$container" "$image"
+    done < <(jq -r --arg g "$g" '.guests[] | select(.name == $g) | .images[] | [.container, .image] | @tsv' "$run/plan.json")
+  done
+}
+
+snapshot() {
+  nix flake metadata --json --option warn-dirty false --no-update-lock-file . > "$run/source.json"
+}
+
+build_all() {
+  local g
+  for g in "${targets[@]}"; do
+    # The output link keeps the build from garbage collection until it is deployed
+    nix build "$source#nixosConfigurations.$g.config.system.build.toplevel" \
+      --out-link "$run/$g" --print-out-paths --no-update-lock-file
+    [[ -x $(readlink -e "$run/$g")/bin/switch-to-configuration ]]
+  done
+}
+
+# What each guest runs now against its new build: up to date, or its image and package changes
+compare_all() {
+  local g address new current
+  for g in "${targets[@]}"; do
+    address=$(field "$g" address)
+    new=$(readlink -e "$run/$g")
+    current=$(remote "$address" readlink -f /run/current-system)
+    printf '%s\n' "$current" > "$run/$g.previous"
+    awk -F '\t' -v g="$g" '$1 == g { print $2 "\t" $3 "\t" $4 }' "$run/images.tsv" > "$run/$g.images"
+    : > "$run/$g.changes"
+    if [[ $new == "$current" ]]; then
+      echo same > "$run/$g.state"
+      continue
+    fi
+    echo changed > "$run/$g.state"
+    remote "$address" nix-store -qR "$current" > "$run/$g.old"
+    nix-store -qR "$new" > "$run/$g.new"
+    gawk "$versions" "$run/$g.old" "$run/$g.new" | LC_ALL=C sort > "$run/$g.changes"
+  done
+  if [[ $target == pve ]]; then
+    host_report
+  fi
+}
+
+download_all() {
+  local g address image
+  for g in "${changed[@]}"; do
+    address=$(field "$g" address)
+    nix copy --to "ssh-ng://root@$address" "$(readlink -e "$run/$g")"
+    while read -r image; do
+      remote "$address" docker image inspect "$image" > /dev/null 2>&1 ||
+        remote "$address" docker pull -q "$image"
+    done < <(jq -r --arg g "$g" '.guests[] | select(.name == $g) | .images[].image' "$run/plan.json")
+  done
+}
+
+# Switches one guest, then waits for every check and no failed units
+deploy_one() {
+  local g=$1 address=$2 new=$3
+  nixos-rebuild switch --store-path "$new" --target-host "root@$address" --no-reexec
+  [[ $(remote "$address" readlink -f /run/current-system) == "$new" ]] || {
+    echo "$g does not run the new build"
+    return 1
+  }
+  healthy "$(field "$g" settle)" "$address"
+}
+
+rollback_one() {
+  local g=$1 address=$2 previous=$3
+  nixos-rebuild switch --store-path "$previous" --target-host "root@$address" --no-reexec
+  healthy "$(field "$g" settle)" "$address"
+}
+
+# --- Review ---
+
+# A list of name, versions and flag, majors first, at most limit rows
+show_changes() {
+  local file=$1 limit=${2:-0} name ver flag n=0 total
+  total=$(wc -l < "$file")
+  while IFS=$'\t' read -r name ver flag; do
+    if ((limit && n == limit)); then
+      note "  … $((total - limit)) more"
+      break
+    fi
+    item "$name" "$ver${flag:+  ${ui_bold}$flag${ui_off}}"
+    n=$((n + 1))
+  done < <(awk -F '\t' '{ print ($3 == "major" ? 0 : 1) "\t" $0 }' "$file" | LC_ALL=C sort -t $'\t' -k1,1n -k2,2 | cut -f2-)
+}
+
+review_guest() {
+  local g=$1 limit=$2 title
+  title="$g · stage $(field "$g" stage)"
+  [[ $(field "$g" autoRollback) == true ]] && title+=" · rolls back by itself"
+  section "$title"
+  if [[ $(field "$g" containers) == self-managed ]]; then
+    note "Its containers are updated by the app's own installer, not cix"
+  fi
+  if [[ $(< "$run/$g.state") == same ]]; then
+    note "Up to date"
+    return
+  fi
+  if [[ -s $run/$g.images ]]; then
+    note "images"
+    show_changes "$run/$g.images"
+  fi
+  note "packages"
+  if [[ -s $run/$g.changes ]]; then
+    show_changes "$run/$g.changes" "$limit"
+  else
+    item "same versions" "configuration or dependency changes only"
+  fi
+}
+
+all_changes() {
+  local g
+  for g in "${changed[@]}"; do review_guest "$g" 0; done
+  echo
 }
 
 # --- Run ---
@@ -261,129 +394,102 @@ host_report() {
 phase=plan
 load_plan "$REPO"
 mapfile -t targets < <(guests)
+section "cix update $target"
 
 phase=preflight
-step "Health before the update"
-# An unhealthy start hides what the update breaks
-for g in "${targets[@]}"; do
-  units=$(failed_units "$(field "$g" address)") || { echo "$g does not answer over SSH" >&2; exit 1; }
-  [[ -z $units ]] || { printf 'Failed units on %s; fix them first:\n%s\n' "$g" "$units" >&2; exit 1; }
-done
-healthy 30 || { echo "Something is already unhealthy; fix it first." >&2; exit 1; }
-echo "All checks pass; no failed units on ${targets[*]}"
+task "Health" "$run/health.log" preflight
+mark_ok "Health" "${#targets[@]} guests, every check passes"
 
 : > "$run/images.tsv"
 if $update; then
   phase=inputs
-  step "Inputs"
   declare -A before
   for i in "${inputs[@]}"; do before[$i]=$(lock_rev "$i"); done
-  logged inputs nix flake update "${inputs[@]}" > /dev/null
+  task "Inputs" "$run/inputs.log" nix flake update "${inputs[@]}"
+  moved=()
   for i in "${inputs[@]}"; do
     now=$(lock_rev "$i")
-    if [[ $now == "${before[$i]}" ]]; then
-      printf '%-15s %s, unchanged\n' "$i" "$now"
-    else
-      printf '%-15s %s → %s\n' "$i" "${before[$i]}" "$now"
-    fi
+    [[ $now == "${before[$i]}" ]] || moved+=("$i ${before[$i]} → $now")
   done
-  [[ $target == pve ]] || echo "The inputs are shared: the other guests take them at their next deploy."
+  if ((${#moved[@]})); then
+    mark_ok "Inputs" "${moved[0]}"
+    for m in "${moved[@]:1}"; do detail "$m"; done
+  else
+    mark_ok "Inputs" "unchanged"
+  fi
+  [[ $target == pve ]] || detail "The inputs are shared: the other guests take them at their next deploy."
 
   if $images; then
     phase=images
-    for g in "${targets[@]}"; do
-      [[ $(field "$g" containers) == pinned ]] || continue
-      while IFS=$'\t' read -r container image; do
-        bump "$g" "$container" "$image"
-      done < <(jq -r --arg g "$g" '.guests[] | select(.name == $g) | .images[] | [.container, .image] | @tsv' "$run/plan.json")
-    done
+    task "Images" "$run/images.log" bump_all
+    newer=$(wc -l < "$run/images.tsv")
+    if ((newer)); then
+      mark_ok "Images" "$newer newer"
+    else
+      mark_ok "Images" "all current"
+    fi
+  else
+    mark_ok "Images" "kept (--no-images)"
   fi
+else
+  mark_ok "Inputs" "kept (--no-update)"
 fi
 
 # Checks, builds and the deploy all use this one snapshot of the tree
 phase=snapshot
-nix flake metadata --json --option warn-dirty false --no-update-lock-file . > "$run/source.json" 2> >(tee "$run/snapshot.log" >&2)
+task "Snapshot" "$run/snapshot.log" snapshot
 source=$(jq -er '.path' "$run/source.json")
 [[ $source == /nix/store/* && -f $source/flake.nix ]]
 load_plan "$source"
 
 phase=checks
-step "Checks"
-nix flake check "$source" --no-update-lock-file > "$run/checks.log" 2>&1 || { tail -n 40 "$run/checks.log" >&2; exit 1; }
-echo "All checks pass"
+task "Checks" "$run/checks.log" nix flake check "$source" --no-update-lock-file
+mark_ok "Checks" "passed"
 
 phase=build
-step "Build"
-for g in "${targets[@]}"; do
-  # The output link keeps the build from garbage collection until it is deployed
-  nix build "$source#nixosConfigurations.$g.config.system.build.toplevel" \
-    --out-link "$run/$g" --print-out-paths --no-update-lock-file \
-    > /dev/null 2>> "$run/build.log" || { tail -n 40 "$run/build.log" >&2; exit 1; }
-  [[ -x $(readlink -e "$run/$g")/bin/switch-to-configuration ]]
-done
-echo "Built ${targets[*]}"
+task "Build" "$run/build.log" build_all
+mark_ok "Build" "${#targets[@]} guests"
 
 phase=review
+task "Compare" "$run/compare.log" compare_all
 changed=()
 for g in "${targets[@]}"; do
-  address=$(field "$g" address)
-  new=$(readlink -e "$run/$g")
-  current=$(remote "$address" readlink -f /run/current-system)
-  printf '%s\n' "$current" > "$run/$g.previous"
-  title="$g (stage $(field "$g" stage)"
-  [[ $(field "$g" autoRollback) == true ]] && title+=", rolls back by itself"
-  step "$title)"
-  if [[ $(field "$g" containers) == self-managed ]]; then
-    echo "Its containers are updated by the app's own installer, not cix (see its wiki page)"
-  fi
-  if [[ $new == "$current" ]]; then
-    echo "Up to date"
-    continue
-  fi
-  changed+=("$g")
-  awk -F '\t' -v g="$g" '$1 == g { print $2 }' "$run/images.tsv" > "$run/$g.images"
-  sed 's/^/  image  /' "$run/$g.images"
-  remote "$address" nix-store -qR "$current" > "$run/$g.old"
-  nix-store -qR "$new" > "$run/$g.new"
-  gawk "$versions" "$run/$g.old" "$run/$g.new" | LC_ALL=C sort > "$run/$g.changes"
-  if [[ -s $run/$g.changes ]]; then
-    sed 's/^/  /' "$run/$g.changes"
-  else
-    echo "  Same package versions; configuration or dependency changes only"
-  fi
-  cat "$run/$g.images" "$run/$g.changes" | grep '  MAJOR$' | sed "s/  MAJOR\$//; s/^/  $g  /" >> "$run/majors" || true
+  [[ $(< "$run/$g.state") == changed ]] && changed+=("$g")
 done
-if [[ $target == pve ]]; then
-  host_report
+for g in "${targets[@]}"; do review_guest "$g" 8; done
+if [[ -s $run/host.tsv ]]; then
+  section "Proxmox host (you update it yourself)"
+  while IFS=$'\t' read -r k v; do item "$k" "$v"; done < "$run/host.tsv"
 fi
 
 if ((${#changed[@]} == 0)); then
-  step "Everything is up to date"
+  section "Everything is up to date"
   exit 0
 fi
-if [[ -s $run/majors ]]; then
-  step "Major version jumps: read their release notes first"
-  cat "$run/majors"
+majors=$(for g in "${changed[@]}"; do
+  awk -F '\t' -v g="$g" '$3 == "major" { print g "\t" $1 "\t" $2 }' "$run/$g.images" "$run/$g.changes"
+done)
+if [[ -n $majors ]]; then
+  section "Major version jumps: read their release notes first"
+  while IFS=$'\t' read -r g name ver; do printf '    %-10s %-22s %s\n' "$g" "$name" "$ver"; done <<< "$majors"
 fi
-printf '\nReview and logs kept at %s\n' "$run"
-$dry && { echo "Dry run: nothing was deployed."; exit 0; }
+if $dry; then
+  echo
+  note "Dry run: nothing deployed. Log  ${run/#$HOME/\~}"
+  exit 0
+fi
 
-step "Deploy"
-echo "Order: ${changed[*]}. Each must pass its checks before the next starts."
-confirm "Deploy to ${changed[*]}?" || { echo "Nothing was deployed. Retry this review with --no-update."; exit 0; }
+section "Deploy"
+note "Order: $(printf '%s → ' "${changed[@]}" | sed 's/ → $//'). Each passes its checks before the next starts."
+ask "Deploy to ${#changed[@]} guests?" "c all changes" all_changes || {
+  note "Nothing was deployed. To deploy this review later: cix update $target --no-update"
+  exit 0
+}
 
 # Everything lands on the guests while their DNS still works
 phase=download
-step "Download"
-for g in "${changed[@]}"; do
-  address=$(field "$g" address)
-  logged download nix copy --to "ssh-ng://root@$address" "$(readlink -e "$run/$g")"
-  while read -r image; do
-    remote "$address" docker image inspect "$image" > /dev/null 2>&1 ||
-      logged download remote "$address" docker pull -q "$image"
-  done < <(jq -r --arg g "$g" '.guests[] | select(.name == $g) | .images[].image' "$run/plan.json")
-  echo "$g: ready"
-done
+task "Download" "$run/download.log" download_all
+mark_ok "Download" "${#changed[@]} guests ready"
 
 phase=deploy
 for g in "${changed[@]}"; do
@@ -391,34 +497,24 @@ for g in "${changed[@]}"; do
   address=$(field "$g" address)
   previous=$(< "$run/$g.previous")
   new=$(readlink -e "$run/$g")
-  step "Deploying $g"
-  ok=true
-  logged "deploy-$g" nixos-rebuild switch --store-path "$new" --target-host "root@$address" --no-reexec || ok=false
-  if $ok && [[ $(remote "$address" readlink -f /run/current-system) != "$new" ]]; then
-    echo "$g does not run the new build" >&2
-    ok=false
+  if task "$g" "$run/deploy-$g.log" deploy_one "$g" "$address" "$new"; then
+    rm -- "$run/$g"
+    previous=
+    mark_ok "$g" "deployed · checks pass"
+    continue
   fi
-  if $ok && ! healthy "$(field "$g" settle)" "$address"; then
-    ok=false
-  fi
-  if ! $ok; then
-    if [[ $(field "$g" autoRollback) == true ]]; then
-      step "Rolling $g back"
-      logged "deploy-$g" nixos-rebuild switch --store-path "$previous" --target-host "root@$address" --no-reexec
-      previous=
-      if healthy "$(field "$g" settle)" "$address"; then
-        echo "$g is back on its previous build and healthy." >&2
-      else
-        echo "$g is back on its previous build but still unhealthy." >&2
-      fi
+  if [[ $(field "$g" autoRollback) == true ]]; then
+    back=$previous
+    previous=
+    if task "$g" "$run/rollback-$g.log" rollback_one "$g" "$address" "$back"; then
+      mark_ok "$g" "back on its previous build and healthy"
+    else
+      mark_fail "$g" "back on its previous build but still unhealthy"
     fi
-    exit 1
   fi
-  rm -- "$run/$g"
-  previous=
-  echo "$g: updated, all checks pass"
+  exit 1
 done
 
 phase=complete
-step "Done"
-echo "Updated ${changed[*]}. Commit flake.lock and the image pins when you are happy (git status)."
+section "Done"
+note "Updated ${changed[*]}. Commit flake.lock and the image pins in ${REPO/#$HOME/\~}."

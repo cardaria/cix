@@ -19,12 +19,14 @@ Options for this machine:
   -c, --cuda     also bump the CUDA pin (recompiles the CUDA packages)
   -n, --dry-run  update, check and build only; no privileged commands
       --no-update  use the existing lock file, including for a retry
+  -v, --verbose  show every command's full output
   -h, --help     show this help
 
 Options for pve and its guests:
   -n, --dry-run  update, check, build and review only; deploy nothing
       --no-update  deploy the current lock file and image pins, for a retry
       --no-images  leave the container image pins as they are
+  -v, --verbose  show every command's full output
 EOF2
 }
 
@@ -73,6 +75,7 @@ for arg in "${opts[@]}"; do
     -c | --cuda) cuda=true ;;
     -n | --dry-run) dry=true ;;
     --no-update) update=false ;;
+    -v | --verbose) ui_verbose=true ;;
     *) usage >&2; exit 1 ;;
   esac
 done
@@ -95,8 +98,9 @@ if [[ -n $untracked ]]; then
 fi
 changes=$(git status --short)
 if [[ -n $changes ]]; then
-  printf 'Working tree changes will be included:\n%s\n' "$changes"
-  confirm "Build with these changes?" || exit 1
+  section "Uncommitted changes"
+  while IFS= read -r line; do printf '  %s\n' "$line"; done <<< "$changes"
+  ask "Build with these changes?" || exit 1
 fi
 
 state=${XDG_STATE_HOME:-$HOME/.local/state}/cix/updates
@@ -109,16 +113,18 @@ current=$(readlink -e /run/current-system)
 
 finish() {
   local status=$?
+  ui_cleanup
   if ((status)); then
-    printf '\nUpdate stopped during %s (status %s). Logs: %s\n' "$phase" "$status" "$run" >&2
-    echo "The lock file may have changed; retry with cix update --no-update." >&2
+    printf '\n  Stopped during %s (status %s)\n' "$phase" "$status" >&2
     if [[ $phase == boot ]]; then
-      echo "Boot installation did not complete. The system profile or boot menu may be partially updated." >&2
-      echo "Resolve the error and retry this exact build before rebooting:" >&2
-      printf '  sudo nixos-rebuild boot --store-path %q --no-reexec\n' "$out" >&2
-      echo "Or restore the previous boot configuration:" >&2
-      printf '  sudo nixos-rebuild boot --store-path %q --no-reexec\n' "$previous" >&2
+      note "The boot menu may be partially updated. Before rebooting, retry this exact build:" >&2
+      printf '    sudo nixos-rebuild boot --store-path %q --no-reexec\n' "$out" >&2
+      note "or restore the previous boot configuration:" >&2
+      printf '    sudo nixos-rebuild boot --store-path %q --no-reexec\n' "$previous" >&2
+    elif [[ $phase != prepare && $phase != backups ]]; then
+      note "The lock file may have changed; retry with cix update $host --no-update" >&2
     fi
+    note "Log  ${run/#$HOME/\~}" >&2
   fi
 }
 trap finish EXIT
@@ -126,70 +132,121 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 trap 'exit 129' HUP
 
-logged() {
-  "$@" 2>&1 | tee "$run/$phase.log"
+lock_rev() {
+  jq -r --arg i "$1" '.nodes[$i].locked.rev // empty | .[0:7]' flake.lock
 }
 
+# Package changes as name, versions and size in bytes, largest first
+changes_by_size() {
+  awk '
+    {
+      i = index($0, ": "); name = substr($0, 1, i - 1); rest = substr($0, i + 2); ver = ""; size = ""
+      if (match(rest, /, [+-][0-9.]+ [KMGT]?i?B$/)) { size = substr(rest, RSTART + 2); ver = substr(rest, 1, RSTART - 1) }
+      else if (rest !~ /^[+-][0-9.]+ [KMGT]?i?B$/) ver = rest
+      if (ver == "") next
+      split(size, s, " "); n = s[1] + 0; if (n < 0) n = -n
+      n *= s[2] ~ /^Ki/ ? 1024 : s[2] ~ /^Mi/ ? 1048576 : s[2] ~ /^Gi/ ? 1073741824 : 1
+      printf "%d\t%s\t%s\n", n, name, ver
+    }' "$run/changes.txt" | LC_ALL=C sort -t $'\t' -k1,1nr
+}
+
+all_changes() {
+  section "All changes"
+  changes_by_size | LC_ALL=C sort -t $'\t' -k2,2 | while IFS=$'\t' read -r _ name ver; do item "$name" "$ver"; done
+  echo
+}
+
+section "cix update $host"
+
 phase=backups
-if ! cix-backup --auto --check; then
-  echo "Recovery-key backup verification failed. Run cix backup, then retry." >&2
+task "Recovery keys" "$run/backups.log" cix-backup --auto --check || {
+  note "Run cix backup to resolve it, then retry." >&2
   exit 1
-fi
+}
+mark_ok "Recovery keys" "verified in 1Password"
 
 if $update; then
   phase=inputs
-  step "Inputs"
-  logged nix flake update "${inputs[@]}"
-  git diff --stat -- flake.lock
+  declare -A before
+  for i in "${inputs[@]}"; do before[$i]=$(lock_rev "$i"); done
+  task "Inputs" "$run/inputs.log" nix flake update "${inputs[@]}"
+  moved=()
+  for i in "${inputs[@]}"; do
+    now=$(lock_rev "$i")
+    [[ $now == "${before[$i]}" ]] || moved+=("$i ${before[$i]} → $now")
+  done
+  if ((${#moved[@]})); then
+    mark_ok "Inputs" "${moved[0]}"
+    for m in "${moved[@]:1}"; do detail "$m"; done
+  else
+    mark_ok "Inputs" "unchanged"
+  fi
+else
+  mark_ok "Inputs" "kept (--no-update)"
 fi
 
-# Both validation and the build consume the same immutable Git-flake snapshot
+# Validation and the build both use the same immutable Git-flake snapshot
 phase=snapshot
-nix flake metadata --json --no-update-lock-file . > "$run/source.json" 2> >(tee "$run/snapshot.log" >&2)
+snapshot() {
+  nix flake metadata --json --no-update-lock-file . > "$run/source.json"
+}
+task "Snapshot" "$run/snapshot.log" snapshot
 source=$(jq -er '.path' "$run/source.json")
 [[ $source == /nix/store/* && -f $source/flake.nix ]]
 
 phase=checks
-step "Checks"
-logged nix flake check "$source" --no-update-lock-file
+task "Checks" "$run/checks.log" nix flake check "$source" --no-update-lock-file
+mark_ok "Checks" "passed"
 
 phase=build
-step "Build"
 # The output link protects the candidate from concurrent garbage collection
-nix build "$source#nixosConfigurations.$host.config.system.build.toplevel" \
-  --out-link "$run/result" --print-out-paths --no-update-lock-file \
-  > "$run/build.out" 2> >(tee "$run/build.log" >&2)
+task "Build" "$run/build.log" nix build "$source#nixosConfigurations.$host.config.system.build.toplevel" \
+  --out-link "$run/result" --print-out-paths --no-update-lock-file
 out=$(readlink -e "$run/result")
 [[ $out == /nix/store/* && -x $out/bin/switch-to-configuration ]]
-printf 'Candidate: %s\nPrevious boot configuration: %s\n' "$out" "$previous"
 printf '%s\n' "$out" > "$run/candidate"
 printf '%s\n' "$previous" > "$run/previous"
+mark_ok "Build" "${out#*-nixos-system-}"
 
 phase=smoke-check
 if [[ -x $out/sw/bin/nvidia-smi ]]; then
-  "$out/sw/bin/nvidia-smi" --help > "$run/nvidia-smi.log" 2>&1 || {
-    echo "The candidate NVIDIA utility cannot start; refusing boot installation. See $run/nvidia-smi.log" >&2
+  task "NVIDIA" "$run/nvidia-smi.log" "$out/sw/bin/nvidia-smi" --help || {
+    note "nvidia-smi crashes in the new build; nothing was installed." >&2
     exit 1
   }
+  mark_ok "NVIDIA" "nvidia-smi starts"
 fi
 
 phase=changes
-step "Changes at next boot"
-logged nix store diff-closures "$previous" "$out"
-if [[ $current == *display-5090* ]]; then
-  [[ -x $out/specialisation/display-5090/bin/switch-to-configuration ]] || {
-    echo "The candidate is missing your display-5090 entry" >&2
-    exit 1
-  }
-  echo "Keep selecting display-5090 in GRUB for the HDMI desktop. The base entry uses DisplayPort."
+diff_changes() {
+  nix store diff-closures "$previous" "$out" > "$run/changes.txt"
+}
+task "Changes" "$run/changes.log" diff_changes
+if [[ $current == *display-5090* && ! -x $out/specialisation/display-5090/bin/switch-to-configuration ]]; then
+  mark_fail "Boot entries" "the new build is missing your display-5090 entry"
+  exit 1
 fi
-printf 'Build and logs retained at %s\n' "$run"
-$dry && exit 0
+total=$(changes_by_size | wc -l)
+section "Changes at next boot"
+if ((total == 0)); then
+  note "Same package versions; configuration only"
+else
+  changes_by_size | head -n 8 | while IFS=$'\t' read -r _ name ver; do item "$name" "$ver"; done
+  ((total <= 8)) || note "… $((total - 8)) more, largest first above"
+fi
+if $dry; then
+  echo
+  note "Dry run: nothing installed. Log  ${run/#$HOME/\~}"
+  exit 0
+fi
 
-step "Next boot"
-echo "This updates the boot menu. The running desktop stays on its current configuration."
-echo "A successful build does not verify login, graphics or other runtime behavior."
-confirm "Install this build for the next boot?" || exit 0
+section "Install"
+more=
+((total > 8)) && more="c all changes"
+ask "Install for the next boot?" "$more" all_changes || {
+  note "Nothing installed. To install this build later: cix update $host --no-update"
+  exit 0
+}
 
 # Another deployment tool may have changed the system while this build ran
 if [[ $(readlink -e /nix/var/nix/profiles/system) != "$previous" ||
@@ -198,14 +255,17 @@ if [[ $(readlink -e /nix/var/nix/profiles/system) != "$previous" ||
   exit 1
 fi
 phase=boot
-logged sudo nixos-rebuild boot --store-path "$out" --no-reexec
+# The password prompt needs the terminal; the step itself then runs quietly
+sudo -v
+task "Boot entry" "$run/boot.log" sudo nixos-rebuild boot --store-path "$out" --no-reexec
 [[ $(readlink -e /nix/var/nix/profiles/system) == "$out" ]] || {
-  echo "The system profile does not point to the candidate" >&2
+  mark_fail "Boot entry" "the system profile does not point to the candidate"
   exit 1
 }
 # The registered system generation now protects this closure from collection
-rm -- "$run/result" || echo "Could not remove the temporary GC root: $run/result" >&2
+rm -- "$run/result" || note "Could not remove the temporary GC root: $run/result" >&2
 phase=complete
-echo "Boot installation completed. Save your work and reboot when ready."
-echo "If the new boot fails, choose the previous generation in GRUB."
-echo "After reboot: check your apps, systemctl --failed, and systemctl --user --failed."
+generation=$(readlink /nix/var/nix/profiles/system)
+[[ $generation =~ ^system-([0-9]+)-link$ ]] && generation=" · generation ${BASH_REMATCH[1]}" || generation=
+mark_ok "Boot entry" "installed for the next boot$generation"
+note "Reboot when ready; the previous generation stays in the boot menu."

@@ -30,6 +30,8 @@ elif name == 'cix-update-pve':
 elif name == 'cix-backup':
     assert args == ['--auto', '--check'], args
     sys.exit(1 if fail == 'backups' else 0)
+elif name == 'sudo' and args == ['-v']:
+    pass
 elif name == 'sudo':
     assert args == ['nixos-rebuild', 'boot', '--store-path', str(root / 'store/candidate'), '--no-reexec'], args
     if fail != 'profile':
@@ -105,7 +107,7 @@ class Update(unittest.TestCase):
         mock.chmod(0o755)
         for name in ('nix', 'sudo', 'hostname', 'cix-backup', 'cix-update-pve'):
             (bindir / name).symlink_to(mock)
-        script = (SOURCE / 'ui.sh').read_text() + (SOURCE / 'update').read_text()
+        script = (SOURCE / 'steps.sh').read_text() + (SOURCE / 'update').read_text()
         script = script.replace('/nix/var/nix/profiles/system', str(self.root / 'profile'))
         script = script.replace('/run/current-system', str(self.root / 'current'))
         script = script.replace('/nix/store/', str(self.root / 'store') + '/')
@@ -136,7 +138,7 @@ class Update(unittest.TestCase):
 
     def test_success(self):
         self.assertEqual(self.run_update(), 0, self.output)
-        self.assertIn('Boot installation completed', self.output)
+        self.assertIn('installed for the next boot', self.output)
         self.assertEqual((self.root / 'current').resolve(), self.root / 'store/previous')
         self.assertEqual((self.root / 'profile').resolve(), self.root / 'store/candidate')
         self.assertEqual(list((self.root / 'state').glob('cix/updates/run.*/result')), [])
@@ -159,7 +161,7 @@ class Update(unittest.TestCase):
     def test_broken_nvidia_utility_blocks_installation(self):
         self.nvidia_utility(139)
         self.assertNotEqual(self.run_update(), 0)
-        self.assertIn('candidate NVIDIA utility cannot start', self.output)
+        self.assertIn('nvidia-smi crashes in the new build', self.output)
         self.no_boot()
 
     def test_working_nvidia_utility(self):
@@ -265,13 +267,13 @@ class Update(unittest.TestCase):
                 self.assertNotEqual(self.run_update(fail=phase), 0, self.output)
                 self.no_boot()
                 self.assertIn('during ' + ('changes' if phase == 'drift' else phase), self.output)
-                self.assertNotIn('Boot installation completed', self.output)
+                self.assertNotIn('installed for the next boot', self.output)
 
     def test_boot_failure_reports_partial_state(self):
         self.assertEqual(self.run_update(fail='boot'), 4, self.output)
         self.assertIn('partially updated', self.output)
         self.assertIn(str(self.root / 'store/previous'), self.output)
-        self.assertNotIn('Boot installation completed', self.output)
+        self.assertNotIn('installed for the next boot', self.output)
 
     def test_interrupted_boot(self):
         self.assertEqual(self.run_update(fail='interrupt'), 130, self.output)
@@ -301,7 +303,7 @@ class Update(unittest.TestCase):
         (self.root / 'current').unlink()
         (self.root / 'current').symlink_to(self.root / 'store/previous-display-5090')
         self.assertEqual(self.run_update(), 0, self.output)
-        self.assertIn('Keep selecting display-5090', self.output)
+        self.assertIn('installed for the next boot', self.output)
 
     def test_concurrent_update(self):
         with (self.repo / '.git/cix-update.lock').open('w') as lock:

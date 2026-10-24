@@ -38,6 +38,9 @@ check the applications and both `systemctl --failed` and
 - `--no-update` uses the existing lock file for a retry or a configuration edit.
 - `--dry-run` still updates inputs and builds, but never invokes `sudo`.
 - `--cuda` additionally updates the deliberately separate CUDA pin.
+- `--verbose` streams every command's full output; by default each step shows a spinner, then one
+  line, and keeps its output in the run's log (shown when a step fails).
+- At a question, `c` lists every change, then asks again.
 
 `cix update pve` asks once, after one review of every guest. It deploys only if every
 check passes first, and stops at the first guest that doesn't pass them afterwards; logs
