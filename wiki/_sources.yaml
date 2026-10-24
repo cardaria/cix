@@ -50,6 +50,7 @@ desktop/plasma.md:
     - pkgs/krohnkite/default.nix
     - pkgs/krohnkite/README.md
     - pkgs/krohnkite/sole-window-gaps.patch
+    - pkgs/krohnkite/retile-on-panel.patch
     - modules/home/wayland/appearance.nix
     - hosts/draba/graphics.nix
     - dotfiles/kwin/
@@ -149,6 +150,7 @@ dev/nix-packaging.md:
     - pkgs/krohnkite/default.nix
     - pkgs/krohnkite/README.md
     - pkgs/krohnkite/sole-window-gaps.patch
+    - pkgs/krohnkite/retile-on-panel.patch
     - pkgs/ninfer/default.nix
     - pkgs/ninfer/README.md
     - pkgs/chandra-ocr/default.nix

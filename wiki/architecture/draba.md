@@ -2,7 +2,7 @@
 title: draba
 category: architecture
 tags: [hardware, gpu, nvidia, disko, btrfs, undervolt]
-updated: 2026-10-22
+updated: 2026-10-24
 ---
 
 # draba
@@ -18,7 +18,7 @@ and a dual-boot disk layout.
 | Display GPU | NVIDIA RTX 5060 LP (8 GiB), open kernel modules with early KMS | `hosts/draba/graphics.nix` |
 | Compute GPU | NVIDIA RTX 5090 (32 GiB), same driver (`branch = "latest"`) | `hosts/draba/graphics.nix` |
 | GPU tuning | Green Curve daemon: VF-curve undervolt, overclock, fans | `hosts/draba/gpu-tuning.nix` |
-| Monitor | 3840×2160 @ 160 Hz, KWin scale 150%, matched by EDID identity | `dotfiles/kwin/draba/kwinoutputconfig.json` |
+| Monitor | DisplayPort: 3840×2160 @ 160 Hz, KWin scale 150%, matched by EDID identity | `dotfiles/kwin/draba/kwinoutputconfig.json` |
 | NixOS disk | 4 TB NVMe, Disko-managed | `hosts/draba/storage.nix` |
 | Windows disk | separate NVMe, not managed by this repo | n/a |
 
@@ -35,6 +35,9 @@ Don't change these without the user asking:
 - The UI size is 150%, set only by KWin's fractional scale.
 - Disko owns only the disk in `hosts/draba/storage.nix`; the Windows disk is never touched.
 - GRUB keeps the Windows entry (os-prober) and `configurationLimit = 4` for the 1 GB ESP.
+
+The saved HDMI profile currently uses about 144 Hz and 145% scale, differing from the
+150% preference above. Confirm that preference before changing the live display configuration.
 
 ## Two GPUs, two jobs
 
@@ -90,7 +93,7 @@ nvidia-smi               # 5090: no display attached
 
 ### Early KMS and console mode
 
-There is one NixOS boot entry (plus older generations). The initrd loads
+The base and `display-5090` entries share one kernel and initrd (plus older generations). The initrd loads
 `nvidia`, `nvidia_modeset` and `nvidia_drm` with their GSP firmware, so the
 console moves to the NVIDIA driver before stage 2. Before that it runs on the
 firmware's 1024×768 framebuffer; GRUB can't raise it because the GPUs'

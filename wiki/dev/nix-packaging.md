@@ -2,7 +2,7 @@
 title: Nix packaging
 category: dev
 tags: [packaging, anki, override, overrideAttrs, symlinkJoin, patches, ninfer, chandra, cuda, fluxer, appimage, greencurve]
-updated: 2026-10-19
+updated: 2026-10-24
 ---
 
 # Nix packaging
@@ -122,8 +122,8 @@ nix build .#greencurve -L --no-link
 
 ## Krohnkite
 
-`pkgs/krohnkite/default.nix` overrides nixpkgs' KWin script with one patch
-to keep screen-edge padding when sole-window percentages are set. The
+`pkgs/krohnkite/default.nix` overrides nixpkgs' KWin script with two patches:
+screen-edge padding for sole-window percentages, and re-tiling when panels appear or resize. The
 same definition is used by Plasma and the standalone flake output.
 Provenance and removal condition: `pkgs/krohnkite/README.md`.
 

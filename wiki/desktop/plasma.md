@@ -169,10 +169,11 @@ choices and rebuild behavior: [Preferences](preferences.md#panel).
 
 ## Display and scaling
 
-The LG monitor runs at 3840×2160, 160 Hz, scale 150%, with KWin's own
+On DisplayPort the LG monitor runs at 3840×2160, 160 Hz, scale 150%, with KWin's own
 fractional scaling. Wayland clients (Qt, GTK 4, Chromium/Electron) render at
 1.5× natively; X11 clients follow System Settings → Display → Legacy
 Applications. No app has its own scale flag or variable.
+The saved HDMI profile differs; see [draba](../architecture/draba.md#invariants).
 
 - `~/.config/kwinoutputconfig.json` is a live link to
   `dotfiles/kwin/draba/kwinoutputconfig.json`. KWin writes display changes
@@ -181,7 +182,7 @@ Applications. No app has its own scale flag or variable.
   serial), never by connector name. A different monitor gets KWin's
   defaults, then its own entry once you change something.
 - The greeter reads a store copy of the same file ([Login](login.md)).
-- The kernel console runs at the same 160 Hz mode, so nothing switches modes
+- On DisplayPort the kernel console runs at the same 160 Hz mode, so nothing switches modes
   from boot to the desktop ([draba](../architecture/draba.md#early-kms-and-console-mode)).
 
 ## GPU selection
