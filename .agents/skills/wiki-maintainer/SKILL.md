@@ -4,7 +4,7 @@ description: >
   Create, update, sync or audit the cix knowledge base in ~/Repos/cix:
   wiki/, memory/, README.md and AGENTS.md. Use when the user says
   "write/update/review/sync the wiki", "docs are out of date", "document
-  <component>", "add a decision card", or after Nix changes that need docs.
+  a component", "add a decision card", or after Nix changes that need docs.
   Covers source lookup via wiki/_sources.yaml, incremental updates, decision
   cards, README/AGENTS upkeep and audits. A one-off typo fix doesn't need it.
 ---
@@ -67,6 +67,10 @@ the source mapping.
 - At most one clause of *why* inline. Longer reasoning goes into a memory card,
   cited in `## Related` as plain text (`memory: <slug>`); a link would 404 publicly.
 - Relative links between pages; repo-relative paths for source files.
+- Describe established behavior, not pending review conversations. Put unresolved
+  audit questions and unperformed checks in the private handoff; keep operational
+  caveats that affect use or recovery in the page. Link to one authoritative
+  explanation instead of repeating it across entry points.
 
 ## `wiki/_sources.yaml`
 

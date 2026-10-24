@@ -2,12 +2,12 @@
 title: GPU access
 category: architecture
 tags: [gpu, nvidia, cuda, permissions, compute]
-updated: 2026-10-22
+updated: 2026-10-24
 ---
 
 # GPU access
 
-The RTX 5090 is restricted to explicitly approved compute workloads;
+The default boot entry reserves the RTX 5090 for named compute tools;
 desktop rendering uses the RTX 5060 and hardware monitoring remains available.
 
 ## One permission boundary
@@ -35,7 +35,7 @@ original direct-creation rules are used instead. Existing permissions are
 preserved; the compute permission service restricts the card before login.
 A plain chmod without this setting is temporary.
 
-This prevents desktop processes from opening the compute card. Choosing
+This prevents ordinary desktop processes from opening the compute card directly. Choosing
 a GPU with CUDA, Vulkan or compositor settings alone does not deny access.
 An app that insists on an inaccessible GPU can fail or use software;
 permission restrictions do not rewrite the app's device choice.
@@ -57,6 +57,12 @@ Both workers pin CUDA to the compute UUID and keep the user's model paths
 and file ownership. The LLM worker accepts no arguments; OCR
 keeps its document and output arguments. Sudo does not preserve arbitrary
 environment overrides for these grants.
+
+This is an accidental-use guard, not isolation from software running as the
+desktop user. That user can invoke the approved workers; OCR accepts user
+paths and both tools read user-writable model files. The LLM's unauthenticated
+loopback API also accepts requests from local processes. Stronger isolation
+would require a separate workload identity and access policy.
 
 ## Monitoring
 

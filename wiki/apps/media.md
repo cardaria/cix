@@ -38,7 +38,7 @@ repo first.
 | --- | --- | --- |
 | **Okular**, **Gwenview**, **Elisa**, **Ark**, **Spectacle** | Plasma (`modules/nixos/desktop.nix`) | documents, images, music, archives, screenshots ([Plasma](../desktop/plasma.md#apps)) |
 | **Haruna**, **KCalc** | `apps/default.nix` | video player (mpv-based, MPRIS), calculator |
-| **Anki** | `apps/default.nix` | flashcards; local package `pkgs/anki/` bumps nixpkgs to the latest release until nixpkgs catches up. Decks and the profile live in `~/.local/share/Anki2`, outside Git; sync goes through AnkiWeb |
+| **Anki** | `apps/default.nix` | flashcards; local package `pkgs/anki/` pins 26.09.3 until nixpkgs catches up. Decks and the profile live in `~/.local/share/Anki2`, outside Git; sync goes through AnkiWeb |
 | **Merkuro Calendar** | `modules/nixos/desktop.nix` | Kalendar's current name; native KDE PIM integration supplies Akonadi and calendar resources |
 | **Plex Desktop** | `apps/plex.nix` | custom icon from `dotfiles/plex/assets/plex.png`, referenced by absolute path so it is independent of the icon theme; launcher subtitle "Media Player"; the launcher runs Mesa's GL on the desktop GPU through Zink and pins the video decoder to it (see below) |
 | **Spotify** | `apps/spotify.nix` | official client, run from a writable copy so Spicetify can patch it; `dotfiles/spicetify/` linked; Spicetify Marketplace for themes and extensions |
@@ -57,7 +57,7 @@ repo first.
 **ChatGPT:** open ChatGPT from the application menu or run `chatgpt`, then sign
 in with your ChatGPT account. Updates go through Nix; don't use upstream's
 distribution installers. The [Linux preview](https://learn.chatgpt.com/docs/linux/linux-app)
-does not formally support NixOS. Runtime use still needs checking after activation.
+does not formally support NixOS.
 The package patches the main and detached windows to use KDE's system title
 bar instead of Electron's minimize, maximize and close overlay. The app's own
 header and navigation remain. This workaround follows
@@ -142,7 +142,7 @@ RTX 5060` when it works.
 Its player uses `vaapi-copy`; `dotfiles/plex/draba/mpv.conf` is live-linked to
 `~/.local/share/plex/mpv.conf`. It selects the desktop card through
 `vaapi-device=/dev/dri/cix-desktop-render`, a link udev creates for the
-5060's render node from its PCI IDs (`hosts/draba/graphics.nix`), so bus
+selected desktop card's render node from its PCI IDs (`hosts/draba/graphics.nix`), so bus
 renumbering can't move it. Without that setting,
 mpv opens the first render node, which is the 5090 on this machine, even
 when Zink draws the interface on the 5060. Plex reads this config before
@@ -154,8 +154,8 @@ patched to decode on the card behind the render node it is given
 ([draba](../architecture/draba.md)); the stock driver used the 5090 and Plex's
 mpv crashed in `vaGetImage`. Don't set `CUDA_VISIBLE_DEVICES` for Plex: it renumbers
 the CUDA devices under the driver. No card IDs live in the Plex module.
-The central [GPU access policy](../architecture/gpu-access.md) also denies
-the desktop process access to the 5090, independently of these preferences.
+In the default boot entry, the [GPU access policy](../architecture/gpu-access.md)
+also denies direct desktop access to the 5090, independently of these preferences.
 
 ## Troubleshooting
 

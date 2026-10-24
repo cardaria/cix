@@ -3,7 +3,7 @@
 **Source:** [datalab-to/chandra](https://github.com/datalab-to/chandra), the
 `chandra-src` flake input. `flake.lock` records its exact revision and hash;
 the version comes from upstream's `pyproject.toml` (currently 0.2.0).
-Neither the locked nixpkgs nor current nixos-unstable packages Chandra.
+The locked nixpkgs does not package Chandra.
 
 **Runtime:** nixpkgs' Python, Transformers, CUDA 13 PyTorch binary, and
 Torchvision built for the RTX 5090 (`sm_120`). Accelerate, causal-conv1d and
@@ -23,7 +23,8 @@ NCCL and NVSHMEM also build only `sm_120`, avoiding unrelated GPU kernels.
   and skipped with a successful exit code. Not submitted upstream.
 
 Upstream integration tests need a model download and a physical GPU, so
-they run outside the build sandbox; import checks still run during the build.
+they require a separate runtime check. The build runs import checks, not
+the GPU integration suite.
 
 **Weights:** the `chandra-model` flake input is the Hugging Face Git tree
 with LFS downloading off: only small configs and hash pointers enter the

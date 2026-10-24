@@ -7,8 +7,8 @@ releases or install target, so the version is `0-unstable-<commit date>` and
 the build tree.
 
 **Build:** CUDA 13 (`cudaPackages_13` and its `backendStdenv`), because
-upstream validates on CUDA 13.1 and benchmarks on 13.4. nixpkgs' default
-`cudaPackages` is 12.x. The only supported architecture is `sm_120a` (RTX
+upstream validates on CUDA 13.1 and benchmarks on 13.4. The CUDA input is
+pinned separately from the workstation. The only supported architecture is `sm_120a` (RTX
 5090). All third-party code is vendored in the source tree, so nothing is
 downloaded at configure time. Tests and benchmarks stay off. They need the GPU,
 which the build sandbox doesn't have. `autoAddDriverRunpath` points the

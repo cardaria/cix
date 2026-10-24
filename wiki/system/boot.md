@@ -126,7 +126,7 @@ and the Berkeley Mono font ([Terminal](../apps/terminal.md)).
 
 | Symptom | Fix |
 | --- | --- |
-| Switch fails with "No space left" on `/boot` | an older generation set still fills the ESP: `df -h /boot`; lower `configurationLimit` or delete old generations (`nix-collect-garbage --delete-older-than`) and switch again |
+| Switch fails with "No space left" on `/boot` | inspect `df -h /boot` and retained generations before retrying. Preserve a known working generation; any manual generation cleanup or bootloader change needs a separate review ([Deployment](../deployment.md)) |
 | `windows`: no Windows Boot Manager entry | the firmware lost it (e.g. after a firmware reset): boot Windows once from the firmware boot menu, or repair its boot files from a Windows USB |
 | `windows` lands in NixOS anyway | the firmware ignored `BootNext`; `efibootmgr` before rebooting should show `BootNext` set |
 | Windows missing from GRUB | run a `switch` (regenerates the menu with os-prober); the firmware entry still works |

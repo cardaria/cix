@@ -2,7 +2,7 @@
 title: Constraints
 category: overview
 tags: [rules, conventions, safety, placement]
-updated: 2026-10-10
+updated: 2026-10-24
 ---
 
 # Constraints
@@ -41,7 +41,7 @@ holds the agent-facing version of the same rules.
 
 | Rule | Detail |
 | --- | --- |
-| Desktop on the RTX 5060 LP | the 5090 is compute-only and CUDA tools pin it by UUID. Never select a GPU by card number |
+| Desktop on the RTX 5060 LP by default | the explicit [display-5090 boot entry](architecture/draba.md#two-gpus-two-jobs) uses the 5090 for the desktop. CUDA tools pin it by UUID; never select a GPU by card number |
 | Displays matched by identity | EDID identity (with serial) in `kwinoutputconfig.json`, never by connector name (`DP-1`) |
 | 150% UI size, Zed as editor | deliberate preferences. The size is KWin's fractional scale; no per-app scale flags or variables ([Plasma](desktop/plasma.md#display-and-scaling)) |
 | Disks by identity | always `/dev/disk/by-id`, never `/dev/nvmeXnY` |

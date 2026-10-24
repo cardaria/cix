@@ -6,8 +6,7 @@
 (`071d93de…a3ea43`) matches the release's `.sha256` sidecar and the
 `PKGBUILD.bin` pin in upstream commit `baad3e1`. The systemd units, desktop
 entry and icon come from `packaging/arch/` at the same tag (commit
-`358793a9633c7366d88581dac75942f09cc4f739`), because the tarball ships only the
-binary.
+`358793a9633c7366d88581dac75942f09cc4f739`).
 
 A source build is impractical. `build.py` refuses any compiler whose SHA-256
 differs from its vendored Zig 0.13.0 manifest, so nixpkgs' Zig can't build it.

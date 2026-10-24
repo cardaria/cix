@@ -61,7 +61,7 @@ Helpful tools: `nix develop` provides `nurl` and `nix-update`; `nix-init` via `n
 
 ## Anki
 
-`pkgs/anki/default.nix` bumps nixpkgs' Anki to the latest release with the
+`pkgs/anki/default.nix` pins Anki 26.09.3 with the
 hashes and `missing-hashes.json` from open nixpkgs PR #573799; the nixpkgs
 recipe, patches and Python dependencies stay as they are. The override is
 guarded by `lib.versionOlder`, so it turns itself off once the locked nixpkgs

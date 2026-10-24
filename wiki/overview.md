@@ -2,7 +2,7 @@
 title: Overview
 category: overview
 tags: [overview, stack, quick-start]
-updated: 2026-10-20
+updated: 2026-10-24
 ---
 
 # Overview
@@ -18,7 +18,7 @@ system and user environment together. The hosts are listed in the [README](../RE
 | OS | NixOS, `nixos-unstable`, pinned by `flake.lock`, updated deliberately |
 | Kernel / boot (draba) | `linuxPackages_latest`, GRUB (EFI) with os-prober for Windows |
 | Storage | Disko-managed btrfs (`@root`, `@home`, `@nix`), 16G swap |
-| Graphics (draba) | RTX 5060 LP drives the desktop over DisplayPort; RTX 5090 is CUDA-only |
+| Graphics (draba) | RTX 5060 LP drives the desktop over DisplayPort by default; [display-5090](architecture/draba.md#two-gpus-two-jobs) uses the RTX 5090 over HDMI |
 | GPU access | [5090 permissions](architecture/gpu-access.md) restrict compute use; System Monitor and `nvidia-smi` keep statistics |
 | Desktop | [KDE Plasma 6](desktop/plasma.md) on Wayland: KWin with Krohnkite tiling, 150% fractional scaling |
 | Login | [Plasma Login Manager](desktop/login.md); KWallet for secrets |

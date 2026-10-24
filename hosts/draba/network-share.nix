@@ -5,7 +5,7 @@
   ...
 }:
 {
-  # Root's copy, readable before /home is mounted
+  # System decryption is independent of the user's editing key
   age.identityPaths = [ "/var/lib/agenix/identity.txt" ];
   age.secrets.smb-cloud = {
     # Own store path, so unrelated flake edits don't change it

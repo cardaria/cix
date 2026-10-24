@@ -20,8 +20,8 @@ code. Only ciphertext (`.age`) and public keys are committed.
 | `~/.config/agenix/identity.txt` | private key for editing | 0600, user |
 | `/var/lib/agenix/identity.txt` | the same private key for system decryption | 0600, root |
 
-The root copy is used because it is readable during early activation, before
-`/home` is mounted. One dedicated age key serves both copies.
+The root copy lets system decryption work independently of the user's home
+and editing key. One dedicated age key serves both copies.
 
 ## Edit or create a secret
 
@@ -96,11 +96,17 @@ sudo install -m 0600 -o root -g root ~/.config/agenix/identity.txt /var/lib/agen
 The SSH key comes back the same way; the public key is derived from it:
 
 ```sh
-op document get "$(hostname) SSH key" --out-file ~/.ssh/id_ed25519   # mode 0600
-ssh-keygen -y -f ~/.ssh/id_ed25519 > ~/.ssh/id_ed25519.pub
+(
+  umask 077
+  set -o noclobber
+  op document get "$(hostname) SSH key" > ~/.ssh/id_ed25519 &&
+    ssh-keygen -y -f ~/.ssh/id_ed25519 > ~/.ssh/id_ed25519.pub
+)
 ```
 
-Check for an existing root key before replacing it. For a fresh install, place
+The SSH example refuses to overwrite existing files. If retrieval fails, inspect
+the partial file before retrying; do not replace a working key. Check for an
+existing root key before replacing it. For a fresh install, place
 the root copy at `/mnt/var/lib/agenix/identity.txt` before first boot
 ([Boot & recovery](../system/boot.md#fresh-installation)).
 
@@ -121,7 +127,7 @@ only this machine's key.
 | --- | --- |
 | `no identity matched any of the recipients` | wrong key: compare `age-keygen -y` with `secrets/<host>.pub` |
 | Secret missing in `/run/agenix` | `journalctl -b -u agenix` (or activation log); is the root identity present? |
-| Rebuild unchanged after editing secret | the `.age` file must be staged/committed for the Git flake to see it |
+| Secret edit absent from a rebuild | stage new `.age` files; tracked edits are included without committing. Check the input revision when consuming a secret from another repo |
 
 ## Related
 
