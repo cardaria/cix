@@ -81,6 +81,8 @@ if name == 'nix':
         if 'build' in fail:
             sys.exit(42)
         p(args[args.index('--out-link') + 1]).symlink_to(root / 'store' / (guest + ('-old' if 'same' in fail else '-new')))
+    elif args[:2] == ['path-info', '--json']:
+        print('{}')
     elif args[0] == 'copy':
         assert args[1:3] == ['--no-check-sigs', '--to'] and args[3].startswith('ssh-ng://root@'), args
     else:

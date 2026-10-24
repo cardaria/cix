@@ -174,7 +174,7 @@ class Update(unittest.TestCase):
 
     def test_bad_metadata(self):
         self.assertNotEqual(self.run_update(fail='bad-metadata'), 0)
-        self.assertIn('during snapshot', self.output)
+        self.assertIn('during checks', self.output)
         self.no_boot()
 
     def test_missing_build_result(self):
@@ -266,7 +266,7 @@ class Update(unittest.TestCase):
                 (self.root / 'calls').write_text('')
                 self.assertNotEqual(self.run_update(fail=phase), 0, self.output)
                 self.no_boot()
-                self.assertIn('during ' + ('changes' if phase == 'drift' else phase), self.output)
+                self.assertIn('during ' + {'drift': 'changes', 'snapshot': 'checks'}.get(phase, phase), self.output)
                 self.assertNotIn('installed for the next boot', self.output)
 
     def test_boot_failure_reports_partial_state(self):

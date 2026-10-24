@@ -8,6 +8,7 @@ else
 fi
 ui_verbose=false
 ui_pid=
+ui_status=
 
 section() {
   printf '\n%s%s%s\n' "$ui_bold" "$*" "$ui_off"
@@ -34,9 +35,13 @@ note() {
   printf '  %s%s%s\n' "$ui_dim" "$*" "$ui_off"
 }
 
+# The cursor stays hidden for the whole run, so it never blinks between steps; questions show it
+ui_hide() { [[ ! -t 1 ]] || printf '\033[?25l'; }
+ui_show() { [[ ! -t 1 ]] || printf '\033[?25h'; }
+
 # Runs one step: a spinner while it works, its output in the log; --verbose shows it all instead
 task() {
-  local label=$1 log=$2 status=0 i=0
+  local label=$1 log=$2 status=0 i=0 text=
   local frames=(⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏)
   shift 2
   if $ui_verbose; then
@@ -46,12 +51,14 @@ task() {
     "$@" >> "$log" 2>&1 < /dev/null &
     ui_pid=$!
     if [[ -t 1 ]]; then
-      printf '\033[?25l'
+      ui_hide
       while kill -0 "$ui_pid" 2> /dev/null; do
-        printf '\r  %s%s%s %s' "$ui_cyan" "${frames[i++ % ${#frames[@]}]}" "$ui_off" "$label"
+        text=
+        [[ -z $ui_status || ! -r $ui_status ]] || text=$(< "$ui_status")
+        printf '\r\033[K  %s%s%s %s  %s%s%s' "$ui_cyan" "${frames[i++ % ${#frames[@]}]}" "$ui_off" "$label" "$ui_dim" "$text" "$ui_off"
         sleep 0.08
       done
-      printf '\r\033[K\033[?25h'
+      printf '\r\033[K'
     fi
     wait "$ui_pid" || status=$?
     ui_pid=
@@ -66,14 +73,16 @@ task() {
 # Stops a running step and shows the cursor again
 ui_cleanup() {
   [[ -z $ui_pid ]] || kill "$ui_pid" 2> /dev/null || true
-  [[ ! -t 1 ]] || printf '\033[?25h'
+  ui_show
 }
 
 # y or yes is yes; the more key runs a function that shows more, then asks again; anything else is no
 ask() {
   local question=$1 key=${2:-} more=${3:-} reply
   while :; do
-    read -r -p "  $question [y/N${key:+, $key}] " reply || return 1
+    ui_show
+    read -r -p "  $question [y/N${key:+, $key}] " reply || { ui_hide; return 1; }
+    ui_hide
     case ${reply,,} in
       y | yes) return 0 ;;
       "${key%% *}")

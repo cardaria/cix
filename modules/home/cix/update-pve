@@ -314,16 +314,49 @@ compare_all() {
   fi
 }
 
+# One line of live status for the download: paths done, data moved and its speed
+human() {
+  awk -v b="$1" 'BEGIN { split("B KB MB GB", u); i = 1; while (b >= 1024 && i < 4) { b /= 1024; i++ } printf (i == 1 ? "%d %s" : "%.1f %s"), b, u[i] }'
+}
+
+copy_progress() {
+  local log=$1 sizes=$2 started=$3 prefix=$4 total copied bytes secs
+  total=$(awk '/^copying [0-9]+ paths/ { print $2 }' "$log" | tail -n 1)
+  copied=$(grep -c "^copying path " "$log" || true)
+  bytes=$(awk 'FNR == 1 { second = (FILENAME == ARGV[2]) } !second { size[$1] = $2; next } /^copying path / { split($0, p, "\047"); sum += size[p[2]] } END { print sum + 0 }' "$sizes" "$log")
+  secs=$(($(date +%s) - started))
+  printf '%s%s/%s paths · %s' "$prefix" "$copied" "${total:-?}" "$(human "$bytes")"
+  ((secs > 0 && bytes > 0)) && printf ' · %s/s' "$(human $((bytes / secs)))"
+  echo
+}
+
 download_all() {
-  local g address image
+  local g address image n=0 count=${#changed[@]} prefix started log sizes copy_pid refs
   for g in "${changed[@]}"; do
+    n=$((n + 1))
     address=$(field "$g" address)
-    # Our own build, over key-authenticated SSH as root: the guest has no key to check its signature against
-    nix copy --no-check-sigs --to "ssh-ng://root@$address" "$(readlink -e "$run/$g")"
-    while read -r image; do
+    prefix="$g ($n/$count) · "
+    log=$run/copy-$g.log
+    sizes=$run/sizes-$g.tsv
+    # Sizes of the closure, to turn the paths copied so far into data moved; progress still works without them
+    nix path-info --json --recursive "$(readlink -e "$run/$g")" 2> /dev/null |
+      jq -r 'if type == "array" then map([.path, (.narSize // 0)]) else to_entries | map([.key, (.value.narSize // 0)]) end | .[] | @tsv' > "$sizes" || : > "$sizes"
+    started=$(date +%s)
+    : > "$log"
+    nix copy --no-check-sigs --to "ssh-ng://root@$address" "$(readlink -e "$run/$g")" > "$log" 2>&1 &
+    copy_pid=$!
+    while kill -0 "$copy_pid" 2> /dev/null; do
+      copy_progress "$log" "$sizes" "$started" "$prefix" > "$ui_status"
+      sleep 0.4
+    done
+    wait "$copy_pid" || { tail -n 12 "$log"; return 1; }
+    mapfile -t refs < <(jq -r --arg g "$g" '.guests[] | select(.name == $g) | .images[].image' "$run/plan.json")
+    for image in "${refs[@]}"; do
+      [[ -n $image ]] || continue
+      printf '%spulling %s\n' "$prefix" "${image%%@*}" > "$ui_status"
       remote "$address" docker image inspect "$image" > /dev/null 2>&1 ||
         remote "$address" docker pull -q "$image"
-    done < <(jq -r --arg g "$g" '.guests[] | select(.name == $g) | .images[].image' "$run/plan.json")
+    done
   done
 }
 
@@ -437,14 +470,15 @@ else
 fi
 
 # Checks, builds and the deploy all use this one snapshot of the tree
-phase=snapshot
-task "Snapshot" "$run/snapshot.log" snapshot
+phase=checks
+check_all() {
+  snapshot
+  nix flake check "$(jq -er '.path' "$run/source.json")" --no-update-lock-file
+}
+task "Checks" "$run/checks.log" check_all
 source=$(jq -er '.path' "$run/source.json")
 [[ $source == /nix/store/* && -f $source/flake.nix ]]
 load_plan "$source"
-
-phase=checks
-task "Checks" "$run/checks.log" nix flake check "$source" --no-update-lock-file
 mark_ok "Checks" "passed"
 
 phase=build
@@ -489,7 +523,9 @@ ask "Deploy to ${#changed[@]} guests?" "c all changes" all_changes || {
 
 # Everything lands on the guests while their DNS still works
 phase=download
+ui_status=$run/download.status
 task "Download" "$run/download.log" download_all
+ui_status=
 mark_ok "Download" "${#changed[@]} guests ready"
 
 phase=deploy

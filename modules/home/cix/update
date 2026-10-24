@@ -186,16 +186,14 @@ else
 fi
 
 # Validation and the build both use the same immutable Git-flake snapshot
-phase=snapshot
-snapshot() {
+phase=checks
+check_all() {
   nix flake metadata --json --no-update-lock-file . > "$run/source.json"
+  nix flake check "$(jq -er '.path' "$run/source.json")" --no-update-lock-file
 }
-task "Snapshot" "$run/snapshot.log" snapshot
+task "Checks" "$run/checks.log" check_all
 source=$(jq -er '.path' "$run/source.json")
 [[ $source == /nix/store/* && -f $source/flake.nix ]]
-
-phase=checks
-task "Checks" "$run/checks.log" nix flake check "$source" --no-update-lock-file
 mark_ok "Checks" "passed"
 
 phase=build
@@ -256,7 +254,9 @@ if [[ $(readlink -e /nix/var/nix/profiles/system) != "$previous" ||
 fi
 phase=boot
 # The password prompt needs the terminal; the step itself then runs quietly
+ui_show
 sudo -v
+ui_hide
 task "Boot entry" "$run/boot.log" sudo nixos-rebuild boot --store-path "$out" --no-reexec
 [[ $(readlink -e /nix/var/nix/profiles/system) == "$out" ]] || {
   mark_fail "Boot entry" "the system profile does not point to the candidate"
